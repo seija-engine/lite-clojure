@@ -4,7 +4,7 @@ use super::opcodes::Opcode;
 #[derive(Debug, Clone)]
 pub struct CodeChunk {
     name:String,
-    op_codes:Vec<u8>,
+    op_codes:Vec<Opcode>,
 }
 
 impl CodeChunk {
