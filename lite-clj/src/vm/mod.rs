@@ -1,5 +1,9 @@
-mod vm;
-mod opcodes;
-mod code_chunk;
+mod thread;
+mod stack;
 mod value;
-mod call_frame;
+mod gc;
+
+pub use {
+    value::{Value,ValueRepr},
+    stack::{}
+};
