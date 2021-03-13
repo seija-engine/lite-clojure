@@ -1,12 +1,27 @@
-use super::{Value,ValueRepr};
+use std::ops::{Deref, DerefMut, Index, IndexMut};
+
+use super::{Getable, Value, ValueRepr, value::Variants};
 use super::errors::{Error};
 use super::gc::{gc::{GcPtr,Borrow,CloneUnrooted,CopyUnrooted}};
 use super::value::ClosureData;
 #[derive(Debug)]
 pub struct Stack {
-    values:Vec<Value>,
-    frames: Vec<FrameState>,
+    pub values:Vec<Value>,
+    frames: Vec<Frame>,
     max_stack_size:u32
+}
+
+impl Index<u32> for Stack {
+    type Output = Value;
+    fn index(&self, index: u32) -> &Value {
+        &self.values[index as usize]
+    }
+}
+
+impl IndexMut<u32> for Stack {
+    fn index_mut(&mut self, index: u32) -> &mut Value {
+        &mut self.values[index as usize]
+    }
 }
 
 impl Stack {
@@ -18,6 +33,11 @@ impl Stack {
         }
     }
 
+    #[inline(always)]
+    pub fn push<T>(&mut self, v: T) where T: StackPrimitive {
+        v.push_to(self)
+    }
+
     pub fn set_max_stack_size(&mut self,max_stack_size:u32) {
         self.max_stack_size = max_stack_size
     }
@@ -26,8 +46,26 @@ impl Stack {
         self.values.len() as u32
     }
 
+    pub fn slide(&mut self, count: u32) {
+        let last = self.len() - 1;
+        let i = last - count;
+        self.copy_value(last, i);
+        self.pop_many(count);
+    }
+
+    pub fn pop_many(&mut self, count: u32) {
+        let len = self.values.len();
+        self.values.truncate(len - count as usize);
+    }
+
+    fn copy_value(&mut self, from: u32, to: u32) {
+        unsafe {
+            self[to] = self[from].clone_unrooted();
+        }
+    }
+
     pub fn current_frame(&mut self) -> StackFrame {
-        let frame: &FrameState = &*self.frames.last().expect("Frame").from_state();
+        let frame: &Frame = &*self.frames.last().expect("Frame").from_state();
         StackFrame {
             frame: unsafe { frame.clone_unrooted() },
             stack: self,
@@ -35,14 +73,60 @@ impl Stack {
     }
 
     pub fn remove_range(&mut self, from: u32, to: u32) {
-        
         self.values.drain(from as usize..to as usize);
+    }
+
+    #[inline]
+    pub fn get_variant(&self, index: u32) -> Option<Variants> {
+        if index < self.len() {
+            Some(Variants::new(&self.values[index as usize]))
+        } else {
+            None
+        }
+    }
+
+    pub fn last(&self) -> Option<Variants> {
+        self.get_variant(self.len() - 1)
+    }
+
+    pub fn pop(&mut self) -> Value {
+        self.values.pop().expect("pop on empty stack")
     }
 }
 #[derive(Debug)]
 pub struct ClosureState {
     pub(crate) closure: GcPtr<ClosureData>,
     pub(crate) instruction_index: usize,
+}
+
+unsafe impl CopyUnrooted for ClosureState {}
+impl CloneUnrooted for ClosureState {
+    type Value = Self;
+    #[inline]
+    unsafe fn clone_unrooted(&self) -> Self {
+        self.copy_unrooted()
+    }
+}
+
+impl StackState for ClosureState {
+    fn from_state(state: &State) -> &Self {
+        match state {
+            State::Closure(state) => state,
+            _ => panic!("Expected closure state, got {:?}", state),
+        }
+    }
+    fn from_state_mut(state: &mut State) -> &mut Self {
+        match state {
+            State::Closure(state) => state,
+            _ => panic!("Expected closure state, got {:?}", state),
+        }
+    }
+    fn to_state(&self) -> Borrow<State> {
+        crate::construct_gc!(State::Closure(@ Borrow::new(self)))
+    }
+    fn max_stack_size(&self) -> u32 {
+        self.closure.function.max_stack_size
+    }
 }
 
 impl ClosureState {
@@ -53,7 +137,7 @@ impl ClosureState {
 #[derive(Debug)]
 pub enum State {
     Unknown,
-    Closure(#[cfg_attr(feature = "serde_derive", serde(state))] ClosureState)
+    Closure(ClosureState)
 }
 
 impl State {
@@ -63,11 +147,37 @@ impl State {
     fn to_state(&self) -> Borrow<State> {
         Borrow::new(self)
     }
+    
+    pub fn closure_ref(&self) -> &ClosureState {
+        match self {
+            State::Unknown => panic!(),
+            State::Closure(closure) => closure
+        }
+    }
 
     fn max_stack_size(&self) -> u32 {
         match self {
             State::Unknown => 0,
             State::Closure(closure) =>todo!()
+        }
+    }
+}
+
+impl StackState for State {
+    fn from_state(state: &State) -> &Self {
+        state
+    }
+    fn from_state_mut(state: &mut State) -> &mut Self {
+        state
+    }
+    fn to_state(&self) -> Borrow<State> {
+        Borrow::new(self)
+    }
+
+    fn max_stack_size(&self) -> u32 {
+        match self {
+            State::Unknown => 0,
+            State::Closure(closure) => closure.max_stack_size()
         }
     }
 }
@@ -83,23 +193,37 @@ impl CloneUnrooted for State {
 }
 
 #[derive(Debug)]
-pub struct FrameState {
-    pub offset:u32,
-    pub state:State
+pub struct Frame<S = State> {
+    pub offset:u32, 
+    pub state:S
 }
 
-impl FrameState {
-    fn from_state(&self) -> Borrow<FrameState> {
-        crate::construct_gc!(FrameState {
+impl<S> Frame<S> {
+    fn to_state(&self) -> Borrow<Frame<State>> where S: StackState {
+        crate::construct_gc!(Frame {
             offset: self.offset,
-            @state: Borrow::new(&self.state),
-            
+            @state: self.state.to_state(),
         })
     }
 }
 
-unsafe impl CopyUnrooted for FrameState {}
-impl CloneUnrooted for FrameState {
+impl Frame<State> {
+    fn from_state<S>(&self) -> Borrow<Frame<S>>
+    where
+        S: StackState,
+    {
+        crate::construct_gc!(Frame {
+            offset: self.offset,
+            @state:Borrow::new(S::from_state(&self.state)),
+        })
+    }
+}
+
+unsafe impl<S> CopyUnrooted for Frame<S> where S: CopyUnrooted {}
+impl<S> CloneUnrooted for Frame<S>
+where
+    S: CopyUnrooted,
+{
     type Value = Self;
     #[inline]
     unsafe fn clone_unrooted(&self) -> Self {
@@ -107,24 +231,78 @@ impl CloneUnrooted for FrameState {
     }
 }
 
-
-
-pub struct StackFrame<'b> {
-    stack: &'b mut Stack,
-    frame: FrameState,
+pub trait StackState: CopyUnrooted + Sized {
+    fn from_state(state: &State) -> &Self;
+    fn from_state_mut(state: &mut State) -> &mut Self;
+    fn to_state(&self) -> Borrow<State>;
+    fn max_stack_size(&self) -> u32;
 }
 
-impl<'b> StackFrame<'b> {
-    pub fn new_frame(stack: &'b mut Stack, args: u32, state: State) -> Result<StackFrame<'b>,Error>  {
+#[derive(Debug)]
+pub struct StackFrame<'b,S = State> {
+    pub stack: &'b mut Stack,
+    pub frame: Frame<S>,
+}
+
+
+impl<'a: 'b, 'b> StackFrame<'b, State> {
+    pub fn from_state<T>(self) -> StackFrame<'b, T>
+    where
+        T: StackState,
+    {
+        let frame = unsafe { Frame::from_state::<T>(self.stack.frames.last().unwrap()).unrooted() };
+        StackFrame {
+            stack: self.stack,
+            frame,
+        }
+    }
+
+    pub fn new_frame(stack: &'b mut Stack, args: u32, state: State) -> Result<StackFrame<'b>,Error> {
         let frame = unsafe { Self::add_new_frame(stack, args, &state, false)?.unrooted() };
         Ok(StackFrame { stack, frame })
     }
+}
 
-    pub(crate) fn enter_scope(self, args: u32, state: &State) -> Result<StackFrame<'b>,Error> {
+impl<'b, S> Deref for StackFrame<'b, S>
+where
+    S: StackState,
+{
+    type Target = [Value];
+    fn deref(&self) -> &[Value] {
+        let offset = self.offset();
+        &self.stack.values[offset as usize..]
+    }
+}
+
+impl<'b, S> DerefMut for StackFrame<'b, S>
+where
+    S: StackState,
+{
+    fn deref_mut(&mut self) -> &mut [Value] {
+        let offset = self.offset();
+        &mut self.stack.values[offset as usize..]
+    }
+}
+
+impl<'a: 'b, 'b, S> StackFrame<'b, S> where S: StackState {
+
+    pub(crate) fn enter_scope<T>(self, args: u32, state: &T) -> Result<StackFrame<'b,T>,Error> where T:StackState {
         self.enter_scope_excess(args, state, false)
     }
 
-    pub(crate) fn enter_scope_excess(self,args: u32,state: &State,excess: bool) -> Result<StackFrame<'b>,Error> {
+    pub fn frame(&self) -> &Frame<S> {
+        &self.frame
+    }
+
+    pub fn slide(&mut self, count: u32) {
+        self.stack.slide(count);
+    }
+
+    pub fn top(&self) -> &Value {
+        self.stack.values.last().expect("StackFrame: top")
+    }
+
+    pub(crate) fn enter_scope_excess<T>(self,args: u32,state: &T,excess: bool) -> Result<StackFrame<'b,T>,Error> where T:StackState {
         let stack = self.stack;
         let frame = unsafe { Self::add_new_frame(stack, args, state, excess)?.unrooted() };
         Ok(StackFrame { stack, frame })
@@ -146,11 +324,11 @@ impl<'b> StackFrame<'b> {
         }
     }
 
-    fn add_new_frame<'gc>(stack: &mut Stack,args: u32,state: &'gc State,excess:bool) -> Result<Borrow<'gc, FrameState>,Error> {
+    fn add_new_frame<'gc,T>(stack: &mut Stack,args: u32,state: &'gc T,excess:bool) -> Result<Borrow<'gc, Frame<T>>,Error> where T:StackState {
         //确保args已经压入栈内
         assert!(stack.len() >= args);
         let offset = stack.len() - args;
-        let frame = crate::construct_gc!(FrameState {
+        let frame = crate::construct_gc!(Frame {
             offset,
             @state: Borrow::new(state),
         });
@@ -158,13 +336,13 @@ impl<'b> StackFrame<'b> {
             assert!(frame.offset <= offset);
             //TODO 外部函数参数检测？
         }
-        if stack.len() + frame.state.max_stack_size() > stack.max_stack_size {
-            return Err(Error::StackOverflow);
-        }
+        //if stack.len() + frame.state.max_stack_size() > stack.max_stack_size {
+        //    return Err(Error::StackOverflow);
+        //}
 
         unsafe {
             //用clone_unrooted Clone了一次
-            stack.frames.push(frame.clone_unrooted());
+            stack.frames.push(frame.to_state().clone_unrooted());
         }
         Ok(frame)
     }
@@ -193,6 +371,25 @@ impl<'b> StackFrame<'b> {
             self.stack.values.splice(index..index, values.iter().map(|v| v.clone_unrooted()));
         }
     }
+
+    pub fn len(&self) -> u32 {
+        self.stack.len() - self.offset()
+    }
+
+    #[inline]
+    pub fn get_variant(&self, index: u32) -> Option<Variants> {
+        self.stack.get_variant(self.offset() + index)
+    }
+
+    #[inline]
+    pub fn get_value<'vm, 'value, T>(&'value self,thread: &'vm crate::vm::thread::Thread,index: u32) -> Option<T> where T:Getable<'vm,'value> {
+        self.get_variant(index).map(|v| T::from_value(thread, v))
+    }
+
+    pub fn pop(&mut self) -> Value {
+      
+        self.stack.values.pop().expect("pop on empty stack")
+    }
 }
 
 pub trait StackPrimitive {
@@ -202,6 +399,36 @@ pub trait StackPrimitive {
         for item in iter {
             item.push_to(stack);
         }
+    }
+}
+
+impl<'a, T: StackPrimitive + 'a> StackPrimitive for &'a T {
+    #[inline(always)]
+    fn push_to(&self, stack: &mut Stack) {
+        (**self).push_to(stack)
+    }
+
+    fn extend_to<'b, I>(iter: I, stack: &mut Stack)
+    where
+        I: IntoIterator<Item = &'b Self>,
+        Self: 'b,
+    {
+        StackPrimitive::extend_to(iter.into_iter().map(|i| *i), stack)
+    }
+}
+
+impl<'a, T: StackPrimitive + 'a> StackPrimitive for Borrow<'a, T> {
+    #[inline(always)]
+    fn push_to(&self, stack: &mut Stack) {
+        (**self).push_to(stack)
+    }
+
+    fn extend_to<'b, I>(iter: I, stack: &mut Stack)
+    where
+        I: IntoIterator<Item = &'b Self>,
+        Self: 'b,
+    {
+        StackPrimitive::extend_to(iter.into_iter().map(|i| &**i), stack)
     }
 }
 

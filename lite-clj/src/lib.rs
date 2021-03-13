@@ -1,6 +1,1 @@
-mod vm;
-
-#[test]
-fn test_vm() {
-    
-}
+pub mod vm;

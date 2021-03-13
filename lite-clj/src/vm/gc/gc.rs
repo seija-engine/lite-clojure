@@ -8,9 +8,38 @@ use std::{
     ops::{Deref, DerefMut},
 };
 
+pub unsafe trait Trace {
+    unsafe fn root(&mut self) {}
+    unsafe fn unroot(&mut self) {}
+
+    fn trace(&self, gc: &mut GC) {
+        let _ = gc;
+    }
+}
+
+pub struct Move<T>(pub T);
+
+unsafe impl<T> DataDef for Move<T>  {
+    type Value = T;
+    fn size(&self) -> usize {
+        mem::size_of::<T>()
+    }
+    fn initialize(self, result: WriteOnly<T>) -> &mut T {
+        result.write(self.0)
+    }
+}
+
 pub trait CloneUnrooted {
     type Value;
     unsafe fn clone_unrooted(&self) -> Self::Value;
+}
+
+impl<T: ?Sized + CloneUnrooted> CloneUnrooted for &'_ T {
+    type Value = T::Value;
+    #[inline]
+    unsafe fn clone_unrooted(&self) -> Self::Value {
+        (**self).clone_unrooted()
+    }
 }
 
 pub unsafe trait CopyUnrooted: CloneUnrooted<Value = Self> + Sized {
@@ -21,8 +50,48 @@ pub unsafe trait CopyUnrooted: CloneUnrooted<Value = Self> + Sized {
 
 #[derive(Clone, Copy, Default, Debug)]
 pub struct Generation(i32);
+
+impl Generation {
+    pub fn next(self) -> Generation {
+        assert!(self.0 < i32::max_value(),"To many generations has been created");
+        Generation(self.0 + 1)
+    }
+}
+
 #[derive(Debug)]
 pub struct GcPtr<T: ?Sized>(NonNull<T>);
+
+impl<T: ?Sized> GcPtr<T> {
+    pub unsafe fn from_raw(ptr: *const T) -> GcPtr<T> {
+        GcPtr(NonNull::new_unchecked(ptr as *mut _))
+    }
+
+    pub fn as_lifetime(&self) -> &() {
+        &()
+    }
+}
+
+impl<T: ?Sized + Eq> Eq for GcPtr<T> {}
+impl<T: ?Sized + PartialEq> PartialEq for GcPtr<T> {
+    fn eq(&self, other: &GcPtr<T>) -> bool {
+        **self == **other
+    }
+}
+
+unsafe impl<T: ?Sized> CopyUnrooted for GcPtr<T> {}
+impl<T: ?Sized> CloneUnrooted for GcPtr<T> {
+    type Value = Self;
+    #[inline]
+    unsafe fn clone_unrooted(&self) -> Self {
+        GcPtr(self.0)
+    }
+}
+
+impl<T: ?Sized> ::std::borrow::Borrow<T> for GcPtr<T> {
+    fn borrow(&self) -> &T {
+        &**self
+    }
+}
 
 impl<T: ?Sized> Deref for GcPtr<T> {
     type Target = T;
@@ -109,6 +178,16 @@ impl<'s, T: ?Sized> WriteOnly<'s, T> {
     }
 }
 
+impl<'s, T> WriteOnly<'s, T> {
+    /// Writes a value to the pointer and returns a pointer to the now initialized value.
+    pub fn write(self, t: T) -> &'s mut T {
+        unsafe {
+            ptr::write(self.0, t);
+            &mut *self.0
+        }
+    }
+}
+
 pub unsafe trait DataDef {
     type Value: ?Sized + for<'a> FromPtr<&'a Self>;
 
@@ -140,6 +219,12 @@ impl GcHeader {
 
 pub unsafe trait FromPtr<D> {
     unsafe fn make_ptr(data: D, ptr: *mut ()) -> *mut Self;
+}
+
+unsafe impl<D, T> FromPtr<D> for T {
+    unsafe fn make_ptr(_: D, ptr: *mut ()) -> *mut Self {
+        ptr as *mut Self
+    }
 }
 
 #[derive(Debug)]
@@ -220,11 +305,7 @@ impl GC {
         self.alloc_ignore_limit_(size, def)
     }
 
-    fn alloc_ignore_limit_<D>(&mut self, size: usize, def: D) -> OwnedGcRef<D::Value>
-    where
-        D: DataDef,
-        D::Value: Sized,
-    {
+    fn alloc_ignore_limit_<D>(&mut self, size: usize, def: D) -> OwnedGcRef<D::Value> where D: DataDef,D::Value: Sized {
         let mut ptr = AllocPtr::new::<D::Value>(size);
         ptr.next = self.values.take();
         self.allocated_memory += ptr.size();
@@ -238,6 +319,12 @@ impl GC {
             OwnedGcRef::with_root(ptr, self)
         }
     }
+
+    pub fn new_child_gc(&self) -> GC {
+        GC::new(self.generation.next(), self.memory_limit)
+    }
+
+    
 }
 
 #[inline]
@@ -300,6 +387,55 @@ macro_rules! construct_gc {
     ($typ: ident $(:: $variant: ident)? ( $( $tt: tt )* ) ) => {
         $crate::construct_enum_gc!{impl $typ $(:: $variant)? [] [] $( $tt )* }
     };
+}
+
+#[macro_export]
+macro_rules! construct_enum_gc {
+    (impl $typ: ident $(:: $variant: ident)? [$($acc: tt)*] [$($ptr: ident)*] @ $expr: expr, $($rest: tt)*) => { {
+        let ref ptr = $expr;
+        $crate::construct_enum_gc!(impl $typ $(:: $variant)?
+                      [$($acc)* unsafe { $crate::gc::CloneUnrooted::clone_unrooted(ptr) },]
+                      [$($ptr)* ptr]
+                      $($rest)*
+        )
+    } };
+
+    (impl $typ: ident $(:: $variant: ident)? [$($acc: tt)*] [$($ptr: ident)*] $expr: expr, $($rest: tt)*) => {
+        $crate::construct_enum_gc!(impl $typ $(:: $variant)?
+                      [$($acc)* $expr,]
+                      [$($ptr)*]
+                      $($rest)*
+        )
+    };
+
+    (impl $typ: ident $(:: $variant: ident)? [$($acc: tt)*] [$($ptr: ident)*] @ $expr: expr) => { {
+        let ref ptr = $expr;
+        $crate::construct_enum_gc!(impl $typ $(:: $variant)?
+                      [$($acc)* unsafe { $crate::vm::gc::CloneUnrooted::clone_unrooted(ptr) },]
+                      [$($ptr)* ptr]
+        )
+    } };
+
+    (impl $typ: ident $(:: $variant: ident)? [$($acc: tt)*] [$($ptr: ident)*] $expr: expr) => {
+        $crate::construct_enum_gc!(impl $typ $(:: $variant)?
+                      [$($acc)* $expr,]
+                      [$($ptr)*]
+        )
+    };
+
+    (impl $typ: ident $(:: $variant: ident)? [$($acc: tt)*] [$($ptr: ident)*] ) => { {
+        let root = [$( $ptr.as_lifetime() )*].first().map_or(&(), |v| *v);
+        #[allow(unused_unsafe)]
+        let v = $typ $(:: $variant)? ( $($acc)* );
+        // Make sure that we constructed something and didn't call a function which could leak the
+        // pointers
+        match &v {
+            $typ $(:: $variant)? (..) if true => (),
+            _ => unreachable!(),
+        }
+        #[allow(unused_unsafe)]
+        unsafe { $crate::vm::gc::Borrow::with_root(v, root) }
+    } };
 }
 
 #[cfg(test)]
