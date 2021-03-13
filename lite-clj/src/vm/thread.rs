@@ -209,11 +209,12 @@ impl<'b, 'gc> ExecuteContext<'b, 'gc>  {
                     drop(program_counter);
                     break;
                 },
-                
-                Instruction::MakeClosure { function_index, upvars } => {}
+            
                 Instruction::NewClosure { function_index, upvars } => {}
+                Instruction::CloseClosure(idx) => {}
                 Instruction::Call(_) => {}
                 Instruction::TailCall(_) => {}
+                Instruction::Push(_) => {}
             }
         };
         let len = self.stack_frame.len();

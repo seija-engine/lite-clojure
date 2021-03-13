@@ -6,17 +6,13 @@ pub enum Instruction {
     PushInt(i64),
     PushByte(u8),
     PushFloat(EqFloat),
+    Push(u32),
 
-    
-
-    MakeClosure {
-        function_index: u32,
-        upvars: u32,
-    },
     NewClosure {
         function_index: u32,
         upvars: u32,
     },
+    CloseClosure(u32),
 
     Call(u32),
     TailCall(u32),
