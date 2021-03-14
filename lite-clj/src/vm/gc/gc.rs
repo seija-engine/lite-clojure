@@ -8,6 +8,8 @@ use std::{
     ops::{Deref, DerefMut},
 };
 
+use crate::vm::Error;
+
 pub unsafe trait Trace {
     unsafe fn root(&mut self) {}
     unsafe fn unroot(&mut self) {}
@@ -324,6 +326,14 @@ impl GC {
         GC::new(self.generation.next(), self.memory_limit)
     }
 
+    pub unsafe fn alloc_and_collect<R, D>(&mut self,roots: R,def: D) -> Result<OwnedGcRef<D::Value>,Error>
+    where
+        D: DataDef,
+        D::Value: Sized + Any {
+
+        //TODO 
+        Ok(self.alloc_owned(def))
+    }
     
 }
 
@@ -358,7 +368,7 @@ macro_rules! construct_gc {
 
     (impl $typ: ident [$($acc: tt)*] [$($ptr: ident)*] @ $field: ident, $($rest: tt)*) => {
         $crate::construct_gc!(impl $typ
-                      [$($acc)* $field: unsafe { $crate::gc::CloneUnrooted::clone_unrooted(&$field) },]
+                      [$($acc)* $field: unsafe { $crate::vm::gc::CloneUnrooted::clone_unrooted(&$field) },]
                       [$($ptr)* $field]
                       $($rest)*
         )
@@ -394,7 +404,7 @@ macro_rules! construct_enum_gc {
     (impl $typ: ident $(:: $variant: ident)? [$($acc: tt)*] [$($ptr: ident)*] @ $expr: expr, $($rest: tt)*) => { {
         let ref ptr = $expr;
         $crate::construct_enum_gc!(impl $typ $(:: $variant)?
-                      [$($acc)* unsafe { $crate::gc::CloneUnrooted::clone_unrooted(ptr) },]
+                      [$($acc)* unsafe { $crate::vm::gc::CloneUnrooted::clone_unrooted(ptr) },]
                       [$($ptr)* ptr]
                       $($rest)*
         )
@@ -436,6 +446,20 @@ macro_rules! construct_enum_gc {
         #[allow(unused_unsafe)]
         unsafe { $crate::vm::gc::Borrow::with_root(v, root) }
     } };
+}
+
+unsafe impl<'a, T> DataDef for Borrow<'a, T>
+where
+    T: DataDef,
+    T::Value: Sized,
+{
+    type Value = T::Value;
+    fn size(&self) -> usize {
+        (**self).size()
+    }
+    fn initialize(self, result: WriteOnly<Self::Value>) -> &mut Self::Value {
+        self.0.initialize(result)
+    }
 }
 
 #[cfg(test)]

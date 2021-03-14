@@ -92,6 +92,8 @@ impl Stack {
     pub fn pop(&mut self) -> Value {
         self.values.pop().expect("pop on empty stack")
     }
+
+    
 }
 #[derive(Debug)]
 pub struct ClosureState {
@@ -261,6 +263,8 @@ impl<'a: 'b, 'b> StackFrame<'b, State> {
         let frame = unsafe { Self::add_new_frame(stack, args, &state, false)?.unrooted() };
         Ok(StackFrame { stack, frame })
     }
+
+    
 }
 
 impl<'b, S> Deref for StackFrame<'b, S>
@@ -284,10 +288,37 @@ where
     }
 }
 
+impl<'b, S> Index<u32> for StackFrame<'b, S>
+where
+    S: StackState,
+{
+    type Output = Value;
+    fn index(&self, index: u32) -> &Value {
+        let offset = self.offset();
+        &self.stack.values[(offset + index) as usize]
+    }
+}
+impl<'b, S> IndexMut<u32> for StackFrame<'b, S>
+where
+    S: StackState,
+{
+    fn index_mut(&mut self, index: u32) -> &mut Value {
+        let offset = self.offset();
+        &mut self.stack.values[(offset + index) as usize]
+    }
+}
+
 impl<'a: 'b, 'b, S> StackFrame<'b, S> where S: StackState {
 
     pub(crate) fn enter_scope<T>(self, args: u32, state: &T) -> Result<StackFrame<'b,T>,Error> where T:StackState {
         self.enter_scope_excess(args, state, false)
+    }
+
+    pub fn to_state(self) -> StackFrame<'b, State> {
+        StackFrame {
+            stack: self.stack,
+            frame: unsafe { self.frame.to_state().unrooted() },
+        }
     }
 
     pub fn frame(&self) -> &Frame<S> {
@@ -392,6 +423,19 @@ impl<'a: 'b, 'b, S> StackFrame<'b, S> where S: StackState {
     }
 }
 
+impl<'b> StackFrame<'b, ClosureState> {
+    pub fn set_instruction_index(&mut self, instruction_index: usize) {
+        self.frame.state.instruction_index = instruction_index;
+        match self.stack.frames.last_mut() {
+            Some(Frame {
+                state: State::Closure(closure),
+                ..
+            }) => closure.instruction_index = instruction_index,
+            _ => (),
+        }
+    }
+}
+
 pub trait StackPrimitive {
     fn push_to(&self, stack: &mut Stack);
 
@@ -459,6 +503,21 @@ impl StackPrimitive for ValueRepr {
         I: IntoIterator<Item = &'b Self>,
     {
         Value::extend_to(iter.into_iter().map(Value::from_ref), stack)
+    }
+}
+
+impl<'a> StackPrimitive for Variants<'a> {
+    #[inline(always)]
+    fn push_to(&self, stack: &mut Stack) {
+        self.0.push_to(stack)
+    }
+
+    fn extend_to<'b, I>(iter: I, stack: &mut Stack)
+    where
+        I: IntoIterator<Item = &'b Self>,
+        Self: 'b,
+    {
+        Value::extend_to(iter.into_iter().map(|i| i.get_value()), stack)
     }
 }
 

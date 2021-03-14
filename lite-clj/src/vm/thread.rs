@@ -2,9 +2,20 @@ use crate::vm::stack::Stack;
 use crate::vm::gc::{GC,GcPtr,Generation,Move,CloneUnrooted,Borrow};
 use crate::vm::vm::GlobalVmState;
 use core::f64;
-use std::{ ops::{Deref, DerefMut,Add,Sub,Mul,Div}, sync::{Arc,Mutex,MutexGuard}};
+use std::{any::Any, ops::{Deref, DerefMut,Add,Sub,Mul,Div}, sync::{Arc,Mutex,MutexGuard}};
 use crate::vm::stack::{StackFrame,State,ClosureState};
-use super::{Getable, ValueRepr,Value, errors::Error, instruction::Instruction, stack::StackState, value::{ClosureData}};
+use super::{Getable, Value, ValueRepr, Variants, errors::Error, gc::gc::{DataDef, GcRef, OwnedGcRef}, instruction::Instruction, stack::StackState, value::{Callable, ClosureData, ClosureInitDef}};
+
+
+unsafe fn lock_gc<'gc>(gc: &'gc GC, value: &Value) -> Variants<'gc> {
+    Variants::with_root(value, gc)
+}
+
+macro_rules! transfer {
+    ($context: expr, $value: expr) => {
+        unsafe { lock_gc(&$context.gc, $value) }
+    };
+}
 pub struct RootedThread {
     thread: GcPtr<Thread>,
     rooted: bool
@@ -80,6 +91,7 @@ impl Thread {
                 instruction_index: 0,
             }),
         ).unwrap();
+       
         let mut context = match context.execute() {
             Ok(ctx) => ctx.expect("call_module to have the stack remaining"),
             Err(err) => return  Err(err)
@@ -128,7 +140,7 @@ impl<'b> DerefMut for OwnedContext<'b> {
 impl <'b> OwnedContext<'b> {
     fn execute(mut self) -> Result<Option<OwnedContext<'b>>,Error> {
         let mut context = self.borrow_mut();
-        let state:&State = &context.stack_frame.frame().state;
+
         loop {
             let state:&State = &context.stack_frame.frame().state;
             match  state {
@@ -170,7 +182,7 @@ pub struct ExecuteContext<'b, 'gc, S: StackState = ClosureState> {
 
 impl<'b, 'gc> ExecuteContext<'b, 'gc>  {
     fn execute_(mut self) -> Result<Option<ExecuteContext<'b,'gc,State>>,Error> {
-        println!("enter execute_");
+        println!("enter execute_ offset:{:?}",self.stack_frame.frame.offset);
         let state = &self.stack_frame.frame().state;
         let function = unsafe { state.closure.function.clone_unrooted() };
         let instructions = &function.instructions[..];
@@ -182,6 +194,18 @@ impl<'b, 'gc> ExecuteContext<'b, 'gc>  {
             program_counter.step();
 
             match  instr {
+                Instruction::Push(i) => {
+                    let v = match self.stack_frame.get(i as usize) {
+                        Some(v) =>  {
+                           println!("push {:?}",v);
+                           transfer!(self, v)
+                        }
+                        None => {
+                            return Err(Error::Message(String::from("push index error")))
+                        }
+                    };
+                    self.stack_frame.push(v);
+                },
                 Instruction::PushInt(i) => self.stack_frame.push(ValueRepr::Int(i)),
                 Instruction::AddInt =>  binop_int(self.thread, &mut self.stack_frame, i64::checked_add)?,
                 Instruction::SubtractInt => binop_int(self.thread, &mut self.stack_frame, i64::checked_sub)?,
@@ -210,11 +234,32 @@ impl<'b, 'gc> ExecuteContext<'b, 'gc>  {
                     break;
                 },
             
-                Instruction::NewClosure { function_index, upvars } => {}
+                Instruction::NewClosure { function_index, upvars } => {
+                    let closure = {
+                        let func = &function.inner_functions[function_index as usize];
+                        Variants::from(alloc(
+                            &mut self.gc,
+                            self.thread,
+                            &self.stack_frame.stack,
+                            crate::construct_gc!(ClosureInitDef(@func, upvars as usize)),
+                        )?)
+                    };
+                    self.stack_frame.push(closure);
+                }
                 Instruction::CloseClosure(idx) => {}
-                Instruction::Call(_) => {}
-                Instruction::TailCall(_) => {}
-                Instruction::Push(_) => {}
+                Instruction::Call(args) => {
+                    self.stack_frame.set_instruction_index(program_counter.instruction_index);
+                    println!("call {:?} {}",self.stack_frame.stack.values,program_counter.instruction_index);
+                    return self.do_call(args).map(Some).into();
+                }
+                Instruction::TailCall(mut args) => {
+                    let mut amount = self.stack_frame.len() - args;
+                    let mut context = self.exit_scope().unwrap_or_else(|x| x);
+                    let end = context.stack_frame.len() - args - 1;
+                    context.stack_frame.remove_range(end - amount, end);
+                    return context.do_call(args).map(Some).into();
+                }
+                
             }
         };
         let len = self.stack_frame.len();
@@ -233,6 +278,78 @@ impl<'b, 'gc> ExecuteContext<'b, 'gc>  {
         context.stack_frame.slide(len);
         println!("execute_ end stack {:?}",context.stack_frame.stack.values);
         Ok(if stack_exists { Some(context) } else { None })
+    }
+
+    
+
+    
+
+    
+
+    fn to_state(self) -> ExecuteContext<'b, 'gc, State> {
+        ExecuteContext {
+            thread: self.thread,
+            stack_frame: self.stack_frame.to_state(),
+            gc: self.gc,
+        }
+    }
+}
+
+impl<'b, 'gc> ExecuteContext<'b, 'gc, State> {
+    fn from_state<T>(self) -> ExecuteContext<'b, 'gc, T>
+    where
+        T: StackState,
+    {
+        ExecuteContext {
+            thread: self.thread,
+            stack_frame: self.stack_frame.from_state(),
+            gc: self.gc
+        }
+    }
+}
+
+impl<'b, 'gc, S> ExecuteContext<'b, 'gc, S> where S: StackState {
+    fn do_call(mut self, args: u32) -> Result<ExecuteContext<'b, 'gc, State>,Error> {
+        let function_index = self.stack_frame.len() - 1 - args;
+        let value = unsafe { self.stack_frame[function_index].get_repr().clone_unrooted() };
+        match &value {
+            ValueRepr::Closure(closure) => {
+                let callable = crate::construct_gc!(Callable::Closure(@Borrow::new(closure)));
+                self.call_function_with_upvars(
+                    args,
+                    closure.function.args,
+                    &callable,
+                    |self_, excess| self_.enter_closure(closure, excess),
+                )
+            },
+            x => Err(Error::Message(format!("Cannot call {:?}", x))),
+        }
+    }
+
+    fn call_function_with_upvars(
+        mut self,
+        args: u32,
+        required_args: u32,
+        callable: &Callable,
+        enter_scope: impl FnOnce(Self, bool) -> Result<ExecuteContext<'b, 'gc, State>,Error>,
+    ) -> Result<ExecuteContext<'b, 'gc, State>,Error> {
+        enter_scope(self,false)
+    }
+
+    fn enter_closure(
+        self,
+        closure: &GcPtr<ClosureData>,
+        excess: bool,
+    ) -> Result<ExecuteContext<'b, 'gc, State>,Error> {
+        Ok(self
+            .enter_scope(
+                closure.function.args,
+                &*crate::construct_gc!(ClosureState {
+                    @closure,
+                    instruction_index: 0,
+                }),
+                excess,
+            )?.to_state())
     }
 
     fn exit_scope(self) -> Result<ExecuteContext<'b, 'gc, State>,ExecuteContext<'b, 'gc, State>> {
@@ -254,18 +371,16 @@ impl<'b, 'gc> ExecuteContext<'b, 'gc>  {
         }
     }
 
-}
+    
 
-impl<'b, 'gc> ExecuteContext<'b, 'gc, State> {
-    fn from_state<T>(self) -> ExecuteContext<'b, 'gc, T>
-    where
-        T: StackState,
-    {
-        ExecuteContext {
+    fn enter_scope<T>(self,args: u32,state: &T,excess: bool) -> Result<ExecuteContext<'b, 'gc, T>,Error>
+     where T: StackState {
+        let stack = self.stack_frame.enter_scope_excess(args, state.clone(), excess)?;
+        Ok(ExecuteContext {
             thread: self.thread,
-            stack_frame: self.stack_frame.from_state(),
-            gc: self.gc
-        }
+            stack_frame:stack,
+            gc: self.gc,
+        })
     }
 }
 struct ProgramCounter<'a> {
@@ -350,3 +465,31 @@ fn binop_f64<'b, 'c, F, T>(vm: &'b Thread,stack: &'b mut StackFrame<'c, ClosureS
     T: for<'d, 'e> Getable<'d, 'e> {
     binop(vm, stack, |l, r| Ok(ValueRepr::Float(f(l, r))))
 }
+
+struct Roots<'b> {
+    vm: &'b GcPtr<Thread>,
+    stack: &'b Stack,
+}
+
+pub(crate) fn alloc<'gc, D>(gc: &'gc mut GC,thread: &Thread,stack: &Stack,def: D) -> Result<GcRef<'gc, D::Value>,Error>
+  where
+    D: DataDef,
+    D::Value: Sized + Any {
+    alloc_owned(gc, thread, stack, def).map(GcRef::from)
+}
+
+pub(crate) fn alloc_owned<'gc, D>(gc: &'gc mut GC,thread: &Thread,stack: &Stack,def: D) -> Result<OwnedGcRef<'gc, D::Value>,Error>
+  where
+    D: DataDef,
+    D::Value: Sized + Any,
+{
+    unsafe {
+        let ptr = GcPtr::from_raw(thread);
+        let roots = Roots {
+            vm: &ptr,
+            stack: stack,
+        };
+        gc.alloc_and_collect(roots, def)
+    }
+}
+
