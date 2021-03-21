@@ -10,7 +10,8 @@ pub struct LexString<'a> {
    
     cache_list:VecDeque<char>,
     ahead_count:usize,
-    cur_index:usize
+    cur_index:usize,
+    char_count:usize
 }
 
 impl<'a> LexString<'a> {
@@ -20,8 +21,13 @@ impl<'a> LexString<'a> {
             chars:str.chars(),
             cache_list:VecDeque::default(),
             ahead_count:0,
-            cur_index:0
+            cur_index:0,
+            char_count:str.chars().count()
         }
+    }
+
+    pub fn remain_len(&self) -> usize {
+        self.char_count - self.cur_index
     }
 
     pub fn next(&mut self) -> Option<char> {
@@ -153,6 +159,8 @@ impl<'a> LexString<'a> {
 #[test]
 fn test_string() {
    let mut lex = LexString::new("  1234∀56");
+   let aaaa = "∀5";
+  
    let aa = lex.take_while(|chr| chr.is_whitespace());
    dbg!(aa.map(|c| c.len()));
    dbg!(lex.next());
