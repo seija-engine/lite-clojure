@@ -1,3 +1,4 @@
+mod cexpr;
 mod expr;
 mod cst;
 mod ast;

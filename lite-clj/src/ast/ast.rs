@@ -1,11 +1,16 @@
-use super::{errors::{ASTError, CSTError}, expr::{CExpr, Expr}};
+use super::{cexpr::{CExpr}, errors::{ASTError, CSTError}, expr::Expr};
 
-pub struct ParseAST {
+pub struct TranslateToAST {
     exprs:Vec<CExpr>
 }
 
-impl ParseAST {
-    pub fn parse(&mut self,cexpr:&CExpr) -> Result<Expr,ASTError> {
+impl TranslateToAST {
+    pub fn translate(&mut self,cexpr:&CExpr) -> Result<Expr,ASTError> {
+
+        todo!()
+    }
+
+    fn analyze(&mut self,cexpr:&CExpr) -> Result<Expr,ASTError> {
         todo!()
     }
 

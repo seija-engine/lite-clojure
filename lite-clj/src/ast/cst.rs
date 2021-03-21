@@ -1,12 +1,13 @@
-use std::{char, ops::Index};
+use std::{char, collections::HashMap, ops::Index};
 use regex::Regex;
+use crate::ast::value::{CONST_KEY,TAG_KEY};
 lazy_static!(
     static ref SymbolPat: Regex = Regex::new("[:]?([\\D&&[^/]].*/)?(/|[\\D&&[^/]][^/]*)").unwrap();
 );
 
 use lazy_static::lazy_static;
 
-use super::{errors::CSTError, expr::{self, CExpr, Number}, lex_string::LexString, utils, value::{Keyword, Symbol}};
+use super::{errors::CSTError, cexpr::{self, CExpr, Number}, lex_string::LexString, utils, value::{Keyword, Symbol}};
 
 pub struct ParseCST<'a> {
     source:LexString<'a>
@@ -37,6 +38,7 @@ impl<'a> ParseCST<'a> {
             let ret = match chr {
                 '\"' => self.parse_string(),
                 ';' => self.parse_comment(),
+                '^' => self.parse_meta(),
                 '\\' => self.parse_char(),
                 '(' => self.parse_list(),
                 '[' => self.parse_vector(),
@@ -62,6 +64,35 @@ impl<'a> ParseCST<'a> {
         };
 
         return Err(CSTError::ErrEof);
+    }
+
+    fn parse_meta(&mut self) -> Result<CExpr,CSTError> {
+        let cexpr = self.parse()?;
+        let mut meta_list:HashMap<CExpr,CExpr> = HashMap::new();
+        match cexpr {
+            CExpr::String(str) => {
+                let k = CExpr::Keyword(TAG_KEY.clone());
+                let v = CExpr::String(str);
+                //meta_list.insert(k, v);
+            },
+            CExpr::Symbol(sym) => {
+                //meta_list.push(CExpr::Keyword(TAG_KEY.clone()));
+                //meta_list.push(CExpr::Symbol(sym));
+            },
+            CExpr::Keyword(k) => {
+                //meta_list.push(CExpr::Keyword(k));
+                //meta_list.push(CExpr::Boolean(true))
+            },
+            CExpr::Map(map_lst) => {
+                //meta_list = map_lst;
+            }
+            _ => return Err(CSTError::ErrMetadata)
+        }
+
+        let mut with_expr = self.parse()?;
+        //with_expr.set_meta(meta);
+        
+        todo!()
     }
 
     fn read_token(&mut self,chr:char) -> Result<String,CSTError> {
@@ -93,7 +124,7 @@ impl<'a> ParseCST<'a> {
                 return Err(CSTError::ErrToken(sym_str.to_string()));
             }
             if sym_str.starts_with("::") {
-                return  unimplemented!();
+                unimplemented!();
             }
             let is_keyword = sym_str.starts_with(":");
             if is_keyword {

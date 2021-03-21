@@ -1,15 +1,40 @@
-use std::fmt;
-#[derive(Debug)]
+use std::{collections::HashMap, fmt};
+use std::hash::{Hash,Hasher};
+use lazy_static::lazy_static;
+use std::rc::Rc;
+
+use super::cexpr::CExpr;
+lazy_static!(
+   pub static ref TAG_KEY: Keyword = Keyword::intern_str(None, "tag");
+   pub static ref CONST_KEY:Keyword = Keyword::intern_str(None, "const");
+);
+
+
+
+
+#[derive(Debug,Clone)]
 pub struct Symbol {
     ns:Option<String>,
     name:String,
+    meta:Option<HashMap<CExpr,CExpr>>
 }
+
+impl Hash for Symbol {
+    fn hash<H: Hasher>(&self, state: &mut H) {
+        self.ns.hash(state);
+        self.name.hash(state);
+    }
+}
+
+
+
 
 impl Symbol {
     pub fn intern(ns:Option<String>,name:String) -> Symbol {
         Symbol {
             ns,
-            name
+            name,
+            meta:None
         }
     }
 
@@ -18,7 +43,8 @@ impl Symbol {
         if i.is_none() || nsname == "/" {
             return Symbol {
                 ns:None,
-                name:nsname.to_string()
+                name:nsname.to_string(),
+                meta:None
             };
         }
         let mut ns = String::default();
@@ -35,8 +61,13 @@ impl Symbol {
         }
         Symbol {
             ns:Some(ns),
-            name
+            name,
+            meta:None
         }
+    }
+
+    pub fn set_meta(&mut self,meta:HashMap<CExpr,CExpr>) {
+        self.meta = Some(meta)
     }
 }
 
@@ -50,7 +81,7 @@ impl fmt::Display for Symbol {
     }
 }
 
-#[derive(Debug)]
+#[derive(Debug,Clone)]
 pub struct Keyword {
     sym:Symbol
 }
@@ -58,6 +89,11 @@ pub struct Keyword {
 impl Keyword {
     pub fn intern(sym:Symbol) -> Keyword {
         Keyword {sym }
+    }
+
+    pub fn intern_str(ns:Option<&str>,name:&str) -> Keyword {
+        let sym = Symbol::intern(ns.map(|s|s.to_string()), name.to_string());
+        Self::intern(sym)
     }
 }
 

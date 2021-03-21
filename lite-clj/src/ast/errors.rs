@@ -10,6 +10,7 @@ pub enum CSTError {
     ErrLexeme(Option<String>),
     UnsupportedCharacter(String),
     ErrToken(String),
+    ErrMetadata,
     ErrEof
 }
 
