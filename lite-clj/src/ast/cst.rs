@@ -1,25 +1,22 @@
-use std::{char, collections::HashMap, ops::Index};
-use regex::Regex;
-use crate::ast::value::{CONST_KEY,TAG_KEY};
-lazy_static!(
-    static ref SymbolPat: Regex = Regex::new("[:]?([\\D&&[^/]].*/)?(/|[\\D&&[^/]][^/]*)").unwrap();
-);
+use std::{char, collections::HashMap};
+use typed_arena::Arena;
 
-use lazy_static::lazy_static;
-
-use super::{errors::CSTError, cexpr::{self, CExpr, Number}, lex_string::LexString, utils, value::{Keyword, Symbol}};
+use super::{cexpr::{self, CExpr, Number}, errors::CSTError, lex_string::LexString, meta::{Meta, MetaTable, Metakey}, utils, value::{Keyword, Symbol}};
 
 pub struct ParseCST<'a> {
-    source:LexString<'a>
+    source:LexString<'a>,
+    meta_table:MetaTable<CExpr>
 }
 
 impl<'a> ParseCST<'a> {
-    pub fn new(code_string:&str) -> ParseCST {
+    pub fn new(code_string:&'a str) -> ParseCST<'a> {
         ParseCST {
-            source:LexString::new(code_string)
+            source:LexString::new(code_string),
+            meta_table:MetaTable::new()
         }
     }
 
+   
     pub fn parse_exprs(&mut self) -> Result<Vec<CExpr>,CSTError> {
         let mut exprs:Vec<CExpr> = Vec::new();
         loop {
@@ -41,7 +38,11 @@ impl<'a> ParseCST<'a> {
                 '^' => self.parse_meta(),
                 '\\' => self.parse_char(),
                 '(' => self.parse_list(),
+                '`' => self.parse_quote(),
                 '[' => self.parse_vector(),
+                '#' => Ok(CExpr::Nil),
+                '~' => Ok(CExpr::Nil),
+                '@' => Ok(CExpr::Nil),
                 '{' => self.parse_map(),
                 '-' => {
                     let nchr = self.source.lookahead(1);
@@ -49,15 +50,15 @@ impl<'a> ParseCST<'a> {
                         self.next();
                         return  self.parse_number(nchr.unwrap(),true);
                     } else {
-                        Err(CSTError::InvalidChar('-'))
+                        Ok(CExpr::Symbol(Symbol::intern_name("-") ))
                     }
                 },
                 chr => {
                     if chr.is_ascii_digit() {
                         return self.parse_number(chr,false);
                     }
-                    let token = self.read_token(chr)?;
-                    return self.interpret_token(token);
+                    let sym = self.parse_symbol(chr)?;
+                    return Ok(sym) 
                 }
             };
             return  ret;
@@ -66,81 +67,95 @@ impl<'a> ParseCST<'a> {
         return Err(CSTError::ErrEof);
     }
 
+    fn parse_quote(&mut self) -> Result<CExpr,CSTError> {
+        let expr = self.parse()?;
+        Ok(CExpr::Quote(Box::new(expr)))
+    }
+
     fn parse_meta(&mut self) -> Result<CExpr,CSTError> {
         let cexpr = self.parse()?;
-        let mut meta_list:HashMap<CExpr,CExpr> = HashMap::new();
+        let mut meta = Meta::new();
         match cexpr {
             CExpr::String(str) => {
-                let k = CExpr::Keyword(TAG_KEY.clone());
-                let v = CExpr::String(str);
-                //meta_list.insert(k, v);
+                meta.insert(Metakey::Keyword(Keyword::key_tag()), CExpr::String(str));
             },
             CExpr::Symbol(sym) => {
-                //meta_list.push(CExpr::Keyword(TAG_KEY.clone()));
-                //meta_list.push(CExpr::Symbol(sym));
+                meta.insert(Metakey::Keyword(Keyword::key_tag()), CExpr::Symbol(sym));
             },
             CExpr::Keyword(k) => {
-                //meta_list.push(CExpr::Keyword(k));
-                //meta_list.push(CExpr::Boolean(true))
+                meta.insert(Metakey::Keyword(k.clone()), CExpr::Boolean(true));
             },
             CExpr::Map(map_lst) => {
-                //meta_list = map_lst;
+                 for idx in 0..map_lst.len() / 2 {
+                     let start = idx * 2;
+                     let k = &map_lst[start];
+                     let v = &map_lst[start + 1];
+                     meta.insert_c_expr(k, v);
+                 }
             }
             _ => return Err(CSTError::ErrMetadata)
         }
 
         let mut with_expr = self.parse()?;
-        //with_expr.set_meta(meta);
+        with_expr.set_meta(meta,&mut self.meta_table);
         
-        todo!()
+       Ok(with_expr)
     }
 
-    fn read_token(&mut self,chr:char) -> Result<String,CSTError> {
-        let mut tok = String::from(chr);
-        let chars = self.source.take_while(|chr| !utils::is_whitespace(chr) && !utils::is_terminating_token(chr));
-        if let Some(chrs) = chars {
-            tok.push_str(chrs);
+    fn parse_symbol(&mut self,chr_start:char) -> Result<CExpr,CSTError> {
+        if !utils::is_sym_char_start(chr_start) {
+            println!("line:{} col:{}",self.source.line(),self.source.col());
+            return Err(CSTError::InvalidSymbolChar(chr_start));
         }
-        Ok(tok)
+        if chr_start == ':' {
+           return self.parse_keyword();
+        }
+        
+        let mut ns_name = String::default();
+        let mut last_name = String::from(chr_start);
+        let mut is_ns:bool = false;
+        while let Some(chr) = self.source.lookahead(1) {
+            if utils::is_whitespace(chr) || !utils::is_sym_char(chr) {
+                break;
+            }
+            if chr == '/' {
+                if is_ns {
+                    return Err(CSTError::ErrSymbol(ns_name));
+                }
+                ns_name.push_str(last_name.as_str());
+                last_name = String::default();
+                is_ns = true;
+                self.next();
+                continue;
+            }
+            last_name.push(chr);
+            self.next();
+        }
+        let sym = Symbol::intern(if is_ns {Some(ns_name)} else {None }, last_name);
+        Ok(CExpr::Symbol(sym))
     }
 
-    fn interpret_token(&mut self,token:String) -> Result<CExpr,CSTError> {
-        match token.as_str() {
-            "nil"  => return Ok(CExpr::Nil),
-            "true" => return Ok(CExpr::Boolean(true)),
-            "false" => return Ok(CExpr::Boolean(false)),
-            str => self.match_sym(str)
+    fn parse_keyword(&mut self) -> Result<CExpr,CSTError> {
+        let mut join_sym = String::from(":");
+        if let Some(take_string) = self.source.take_while(|chr| !utils::is_whitespace(chr) && utils::is_sym_char(chr) && chr != '/') {
+            join_sym.push_str(take_string);
         }
+        if join_sym.len() == 1 || join_sym.as_str() == "::" || join_sym.ends_with(":") || join_sym.starts_with(":::") {
+                return Err(CSTError::ErrSymbol(join_sym));
+        }
+        let mut is_local = false;
+        if join_sym.starts_with("::") {
+            is_local = true;
+        }
+        let mut keyword = Keyword::intern(Symbol::intern(None, join_sym));
+        keyword.is_local = is_local;
+        return Ok(CExpr::Keyword(keyword));
     }
 
-    fn match_sym(&mut self,sym_str:&str) -> Result<CExpr,CSTError> {
-        let mcaps = SymbolPat.captures(sym_str);
-        if let Some(caps) = mcaps {
-           
-            let ns = caps.get(1);
-            let ns_str = ns.map(|a| a.as_str()).unwrap_or_default();
-            let name_str = caps.get(2).map(|s|s.as_str()).unwrap_or_default();
-            if ns.is_some() && ns_str.ends_with(":/") || name_str.ends_with(":") || sym_str.match_indices("::").count() > 1 {
-                return Err(CSTError::ErrToken(sym_str.to_string()));
-            }
-            if sym_str.starts_with("::") {
-                unimplemented!();
-            }
-            let is_keyword = sym_str.starts_with(":");
-            if is_keyword {
-                let strs:String = sym_str.chars().skip(1).collect();
-                let sym = Symbol::intern_name(strs.as_str());
-                return Ok(CExpr::Keyword(Keyword::intern(sym) ));
-            } else {
-                return Ok(CExpr::Symbol(Symbol::intern_name(sym_str)));
-            }
-        } else {
-            return Err(CSTError::ErrToken(sym_str.to_string()));
-        }
-    }
+  
 
     fn parse_char(&mut self) -> Result<CExpr,CSTError> {
-       let mtoken = self.source.take_while(|chr| !utils::is_terminating_token(chr) && !utils::is_whitespace(chr));
+       let mtoken = self.source.take_while(|chr| chr == ',' || (utils::is_sym_char(chr) && !chr.is_whitespace()));
        match mtoken {
            Some(tok) => {
                let len = tok.chars().count();
@@ -189,6 +204,7 @@ impl<'a> ParseCST<'a> {
            self.skip_whitespace();
            let next_char = self.source.lookahead(1);
            match next_char {
+               
                Some(chr) => {
                    if chr == end_char {
                        self.source.next();
@@ -456,12 +472,13 @@ impl<'a> ParseCST<'a> {
 
 #[test]
 fn test_parse() {
-    let code_string = std::fs::read_to_string("tests/clj/test.clj").unwrap();
+   let code_string = std::fs::read_to_string("tests/clj/test.clj").unwrap();
+  
    let mut parser = ParseCST::new(&code_string);
    let ret = parser.parse_exprs();
    for e in ret.unwrap() {
        println!("{}",e);
    }
-
+   dbg!(parser.meta_table);
    
 }

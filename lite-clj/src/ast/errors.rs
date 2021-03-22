@@ -1,5 +1,6 @@
 #[derive(Debug)]
 pub enum CSTError {
+    InvalidSymbolChar(char),
     InvalidChar(char),
     ErrExpectedHex,
     ErrLeadingZero,
@@ -9,7 +10,7 @@ pub enum CSTError {
     ErrCharInGap(char),
     ErrLexeme(Option<String>),
     UnsupportedCharacter(String),
-    ErrToken(String),
+    ErrSymbol(String),
     ErrMetadata,
     ErrEof
 }

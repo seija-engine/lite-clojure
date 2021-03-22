@@ -1,6 +1,7 @@
 use std::{collections::HashMap, fmt};
 
-use super::value::{Keyword, Symbol};
+use super::{meta::{Meta, MetaTable}, value::{Keyword, Symbol}};
+
 
 #[derive(Debug,Clone)]
 pub enum CExpr {
@@ -16,14 +17,16 @@ pub enum CExpr {
     Vector(Vec<CExpr>),
     Map(Vec<CExpr>),
     Meta(Vec<CExpr>),
+    Quote(Box<CExpr>)
 }
 
 
 impl CExpr {
-    pub fn set_meta(&mut self,meta:HashMap<CExpr,CExpr>) {
+    pub fn set_meta(&mut self,meta:Meta<CExpr>,table:&mut MetaTable<CExpr>) {
         match self {
             CExpr::Symbol(sym) => {
-
+                let index = table.add_meta(meta);
+                sym.set_meta(index)
             }
             _ => ()
         }
@@ -39,7 +42,13 @@ impl fmt::Display for CExpr {
             CExpr::String(str) => write!(f,"\"{}\"",str),
             CExpr::Comment(comment) => write!(f,";{}\r\n",comment),
             CExpr::Number(raw,_) => write!(f,"{}",raw),
-            CExpr::Symbol(sym) => write!(f,"{}",sym),
+            CExpr::Symbol(sym) => {
+                if let Some(m) = sym.meta {
+                    write!(f,"sym({},{})",sym,m)
+                } else {
+                    write!(f,"{}",sym)
+                }
+            },
             CExpr::Char(chr) => write!(f,"'{}'",chr),
             CExpr::List(lst) => {
                 write!(f,"{}",display_vec(lst, '(', ')'))
@@ -52,6 +61,9 @@ impl fmt::Display for CExpr {
             },
             CExpr::Meta(lst) => {
                 write!(f,"meta{}",display_vec(lst, '(', ')'))
+            },
+            CExpr::Quote(expr) => {
+                write!(f,"{}",expr)
             }
         }
     }

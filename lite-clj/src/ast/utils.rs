@@ -16,7 +16,7 @@ pub fn digits_to_integer_base(base:i64,str:&str) -> i64 {
  }
 
  pub fn is_normal_string_char(chr:char) -> bool {
-   return  chr != '"' && chr != '\\' && chr != '\r' && chr != '\n'
+   return  chr != '"' && chr != '\\'
 }
 
 fn is_identifier_char(ch: char) -> bool {
@@ -59,10 +59,11 @@ pub fn is_whitespace(chr:char) -> bool {
     chr.is_whitespace() || chr== ','
 }
 
-fn is_spec_char(chr:char) -> bool {
-    "\";\'@^`~()[]{}\\%#".contains(chr)
+
+pub fn is_sym_char(ch:char) -> bool {
+    return !"\";@^`~()[]{}\\".contains(ch);
 }
 
-pub fn is_terminating_token(ch:char) -> bool {
-    return ch != '#' && ch != '\'' && ch != '%' && is_spec_char(ch);
+pub fn is_sym_char_start(ch:char) -> bool {
+    return !"\";@^`~()[]{}\\#".contains(ch);
 }

@@ -11,7 +11,10 @@ pub struct LexString<'a> {
     cache_list:VecDeque<char>,
     ahead_count:usize,
     cur_index:usize,
-    char_count:usize
+    char_count:usize,
+
+    line:u64,
+    col:u64
 }
 
 impl<'a> LexString<'a> {
@@ -22,7 +25,9 @@ impl<'a> LexString<'a> {
             cache_list:VecDeque::default(),
             ahead_count:0,
             cur_index:0,
-            char_count:str.chars().count()
+            char_count:str.chars().count(),
+            line:1,
+            col:0,
         }
     }
 
@@ -31,6 +36,26 @@ impl<'a> LexString<'a> {
     }
 
     pub fn next(&mut self) -> Option<char> {
+        let chr = self._next();
+        if chr == Some('\n') {
+            self.line += 1;
+            self.col = 0;
+        } else {
+            self.col += 1;
+        }
+
+        chr
+    }
+
+    pub fn line(&self) -> u64 {
+        self.line
+    }
+
+    pub fn col(&self) -> u64 {
+        self.col
+    }
+
+    fn _next(&mut self) -> Option<char> {
       if self.ahead_count > 0 {
           self.cur_index += 1;
           let sub_count = self.sub_ahead_len();
