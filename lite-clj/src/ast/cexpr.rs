@@ -17,7 +17,11 @@ pub enum CExpr {
     Vector(Vec<CExpr>),
     Map(Vec<CExpr>),
     Meta(Vec<CExpr>),
-    Quote(Box<CExpr>)
+    Quote(Box<CExpr>),
+    SyntaxQuote(Box<CExpr>),
+    Dref(Box<CExpr>),
+    UnQuote(Box<CExpr>),
+    UnQuoteS(Box<CExpr>)
 }
 
 
@@ -29,6 +33,62 @@ impl CExpr {
                 sym.set_meta(index)
             }
             _ => ()
+        }
+    }
+
+    pub fn is_iseq(&self) -> bool {
+        match self {
+            CExpr::List(_) =>  true,
+            CExpr::Quote(_) => true,
+            CExpr::UnQuote(_) => true,
+            CExpr::Dref(_) => true,
+            _ => false
+        }
+    }
+
+    pub fn is_string(&self) -> bool {
+        match self {
+            CExpr::String(_) => true,
+            _ => false
+        }
+    }
+
+    pub fn cast_string(self) -> Result<String,Self> {
+        match self {
+            CExpr::String(s) => Ok(s),
+            _ => Err(self)
+        }
+    } 
+
+    pub fn cast_symbol(self) -> Result<Symbol,Self> {
+        match self {
+            CExpr::Symbol(s) => Ok(s),
+            _ => Err(self)
+        }
+    }
+
+    pub fn take_seq_list(self) -> Option<Vec<CExpr>>  {
+        match self {
+            CExpr::List(vec) => Some(vec),
+            CExpr::Quote(b) => (*b).take_seq_list(),
+            CExpr::Dref(b) => (*b).take_seq_list(),
+            CExpr::UnQuote(b) => (*b).take_seq_list(),
+            CExpr::UnQuoteS(b) => (*b).take_seq_list(),
+            _ => None
+        }
+    }
+
+    pub fn seq_first(&self) -> Option<&CExpr>  {
+        match self {
+            CExpr::List(lst) => lst.first(),
+            _ => None
+        }
+    }
+
+    pub fn cast_sym(&self) -> Option<&Symbol> {
+        match self {
+            CExpr::Symbol(sym) => Some(sym),
+            _ => None
         }
     }
 }
@@ -64,7 +124,13 @@ impl fmt::Display for CExpr {
             },
             CExpr::Quote(expr) => {
                 write!(f,"{}",expr)
-            }
+            },
+            CExpr::Dref(expr) => {
+                write!(f,"@{}",expr)
+            },
+            CExpr::SyntaxQuote(expr) => write!(f,"`{}",expr),
+            CExpr::UnQuote(expr) => write!(f,"`~{}",expr),
+            CExpr::UnQuoteS(expr) => write!(f,"`~@{}",expr)
         }
     }
 }

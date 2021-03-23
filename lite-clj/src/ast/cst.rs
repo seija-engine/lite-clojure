@@ -38,11 +38,12 @@ impl<'a> ParseCST<'a> {
                 '^' => self.parse_meta(),
                 '\\' => self.parse_char(),
                 '(' => self.parse_list(),
-                '`' => self.parse_quote(),
+                '`' => self.parse_syntax_quote(),
+                '\'' => Ok(CExpr::Quote(Box::new(self.parse()?))),
                 '[' => self.parse_vector(),
-                '#' => Ok(CExpr::Nil),
-                '~' => Ok(CExpr::Nil),
-                '@' => Ok(CExpr::Nil),
+                '@' => self.parse_deref_quote(),
+                '~' => self.parse_un_quote(),
+                '#' => self.parse_dispatch(),
                 '{' => self.parse_map(),
                 '-' => {
                     let nchr = self.source.lookahead(1);
@@ -67,9 +68,34 @@ impl<'a> ParseCST<'a> {
         return Err(CSTError::ErrEof);
     }
 
-    fn parse_quote(&mut self) -> Result<CExpr,CSTError> {
+    fn parse_dispatch(&mut self) -> Result<CExpr,CSTError> {
+        match self.source.next() {
+            Some('^') => self.parse_meta(),
+            Some(c) => Err(CSTError::InvalidChar(c)),
+            None => Err(CSTError::ErrEof)
+        }
+    }
+
+    fn parse_un_quote(&mut self) -> Result<CExpr,CSTError> {
+        if let Some(chr) = self.source.lookahead(1) {
+            if chr == '@' {
+                self.next();
+                return  Ok(CExpr::UnQuoteS(Box::new(self.parse()?)))
+            } else {
+                return  Ok(CExpr::UnQuote(Box::new(self.parse()?)))
+            }
+        }
+        return Err(CSTError::ErrEof);
+    }
+
+    fn parse_deref_quote(&mut self) -> Result<CExpr,CSTError> {
         let expr = self.parse()?;
-        Ok(CExpr::Quote(Box::new(expr)))
+        Ok(CExpr::Dref(Box::new(expr)))
+    }
+
+    fn parse_syntax_quote(&mut self) -> Result<CExpr,CSTError> {
+        let expr = self.parse()?;
+        Ok(CExpr::SyntaxQuote(Box::new(expr)))
     }
 
     fn parse_meta(&mut self) -> Result<CExpr,CSTError> {
@@ -130,6 +156,14 @@ impl<'a> ParseCST<'a> {
             }
             last_name.push(chr);
             self.next();
+        }
+        if ns_name == "" {
+            match last_name.as_str() {
+                "nil" => return Ok(CExpr::Nil),
+                "true" => return Ok(CExpr::Boolean(true)),
+                "false" => return Ok(CExpr::Boolean(false)),
+                _ => ()
+            }
         }
         let sym = Symbol::intern(if is_ns {Some(ns_name)} else {None }, last_name);
         Ok(CExpr::Symbol(sym))
@@ -466,6 +500,10 @@ impl<'a> ParseCST<'a> {
                 break;
             }
         }
+    }
+
+    pub fn take(self) -> MetaTable<CExpr> {
+        self.meta_table
     }
 }
 

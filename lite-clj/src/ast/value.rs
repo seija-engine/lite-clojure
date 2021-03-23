@@ -21,6 +21,14 @@ impl Symbol {
         }
     }
 
+    pub fn sym_name(&self) -> &str {
+        self.name.as_str()
+    }
+
+    pub fn sym_ns(&self) -> Option<&String> {
+       self.ns.as_ref()
+    }
+
     pub fn intern_name(nsname:&str) -> Symbol {
         let i = nsname.find('/');
         if i.is_none() || nsname == "/" {

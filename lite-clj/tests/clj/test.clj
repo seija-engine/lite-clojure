@@ -1,1 +1,3 @@
-(def aa 123)
+(def var-a nil)
+(def TRUE true)
+(def FALSE false)
