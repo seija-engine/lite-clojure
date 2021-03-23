@@ -18,6 +18,6 @@ pub enum CSTError {
 #[derive(Debug)]
 pub enum ASTError {
     ErrSeq,
-    ManyArgDef,
-    FewArgDef
+    ArgErrorDef,
+    
 }

@@ -1,10 +1,10 @@
-mod cexpr;
-mod expr;
-mod cst;
-mod ast;
+pub mod cexpr;
+pub mod expr;
+pub mod cst;
+pub mod ast;
 mod lex_string;
 pub mod errors;
-mod utils;
-mod value;
-mod env;
-mod meta;
+pub mod utils;
+pub mod value;
+pub mod env;
+pub mod meta;

@@ -1,7 +1,7 @@
-use std::{collections::HashMap, fmt};
-use std::hash::{Hash,Hasher};
+use std::{fmt};
+use std::hash::{Hash};
 
-use super::{cexpr::CExpr, meta::{Meta,MetaIndex}};
+use super::{meta::{MetaIndex}};
 
 
 #[derive(Debug,Clone,Hash,Eq,PartialEq)]
