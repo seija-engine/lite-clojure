@@ -53,6 +53,13 @@ impl CExpr {
         }
     }
 
+    pub fn is_vec(&self) -> bool {
+        match self {
+            CExpr::Vector(_) => true,
+            _ => false
+        }
+    }
+
     pub fn cast_string(self) -> Result<String,Self> {
         match self {
             CExpr::String(s) => Ok(s),
@@ -67,13 +74,14 @@ impl CExpr {
         }
     }
 
-    pub fn take_seq_list(self) -> Option<Vec<CExpr>>  {
+    pub fn take_list(self) -> Option<Vec<CExpr>>  {
         match self {
+            CExpr::Vector(lst) => Some(lst),
             CExpr::List(vec) => Some(vec),
-            CExpr::Quote(b) => (*b).take_seq_list(),
-            CExpr::Dref(b) => (*b).take_seq_list(),
-            CExpr::UnQuote(b) => (*b).take_seq_list(),
-            CExpr::UnQuoteS(b) => (*b).take_seq_list(),
+            CExpr::Quote(b) => (*b).take_list(),
+            CExpr::Dref(b) => (*b).take_list(),
+            CExpr::UnQuote(b) => (*b).take_list(),
+            CExpr::UnQuoteS(b) => (*b).take_list(),
             _ => None
         }
     }

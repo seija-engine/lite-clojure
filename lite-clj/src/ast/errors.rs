@@ -19,5 +19,7 @@ pub enum CSTError {
 pub enum ASTError {
     ErrSeq,
     ArgErrorDef,
-    
+    BadBindingForm,
+    ErrLet,
+    ErrIf,
 }

@@ -1,1 +1,1 @@
-(def var-a nil)
+(if true 1)
