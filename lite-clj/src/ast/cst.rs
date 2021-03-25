@@ -1,5 +1,4 @@
-use std::{char, collections::HashMap};
-use typed_arena::Arena;
+use std::{char};
 
 use super::{cexpr::{self, CExpr, Number}, errors::CSTError, lex_string::LexString, meta::{Meta, MetaTable, Metakey}, utils, value::{Keyword, Symbol}};
 

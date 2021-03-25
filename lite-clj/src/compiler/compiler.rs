@@ -21,6 +21,20 @@ impl From<CompiledFunction> for CompiledModule {
     }
 }
 
+pub struct FunctionEnv {
+    function: CompiledFunction
+}
+
+struct FunctionEnvs {
+    envs: Vec<FunctionEnv>,
+}
+
+impl FunctionEnvs {
+    fn new() -> FunctionEnvs {
+        FunctionEnvs { envs: vec![] }
+    }
+}
+
 pub struct Compiler {
 
 }
