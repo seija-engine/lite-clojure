@@ -1,1 +1,1 @@
-(if true 1)
+(def number 123456)

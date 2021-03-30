@@ -109,17 +109,37 @@ impl Compiler {
         for expr in ast_module.exprs {
             self.compile_expr(expr,&mut env)
         }
-        todo!()
+        Err(())
     }
 
     pub fn compile_expr(&mut self,expr:Expr, function: &mut FunctionEnvs) {
         match expr {
             Expr::Number(Number::Int(n)) =>  function.emit(Instruction::PushInt(n)),
             Expr::Number(Number::Float(f)) => function.emit(Instruction::PushFloat(f.into())),
-            Expr::Def(_,sym,val) => {
-
+            Expr::Def(_,_sym,val) => {
+                match val {
+                    None => function.emit(Instruction::PushNil),
+                    Some(v) => self.compile_expr(*v, function)
+                }
             },
             _ => {}
         }
     }
+}
+
+#[test]
+fn test_compiler() {
+   use crate::ast::cst::{ParseCST};
+   use crate::ast::ast::TranslateToAST;
+   let file_name = "tests/clj/test.clj";
+   let code_string = std::fs::read_to_string(file_name).unwrap();
+   let mut parser = ParseCST::new(&code_string);
+   let cexprs = parser.parse_exprs().unwrap();
+   let meta_table = parser.take();
+
+   let mut trans = TranslateToAST::new(file_name.to_string(), cexprs, meta_table);
+   let ast_mod = trans.translate();
+
+   let mut compiler = Compiler::new();
+   let cm = compiler.compile_ast_module(ast_mod);
 }

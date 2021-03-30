@@ -229,6 +229,7 @@ impl<'b, 'gc> ExecuteContext<'b, 'gc>  {
                 Instruction::MultiplyFloat => binop_f64(self.thread, &mut self.stack_frame, f64::mul)?,
                 Instruction::FloatLT => binop_bool(self.thread, &mut self.stack_frame, |l: f64, r| l < r)?,
                 Instruction::FloatEQ => binop_bool(self.thread, &mut self.stack_frame, |l: f64, r| l == r)?,
+                Instruction::PushNil => self.stack_frame.push(ValueRepr::Nil),
                 Instruction::Return => {
                     drop(program_counter);
                     break;

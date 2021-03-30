@@ -3,6 +3,7 @@ use super::value::EqFloat;
 #[derive(Copy, Clone, Debug, Eq, PartialEq, Hash)]
 #[allow(dead_code)]
 pub enum Instruction {
+    PushNil,
     PushInt(i64),
     PushByte(u8),
     PushFloat(EqFloat),

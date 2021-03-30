@@ -63,6 +63,7 @@ pub enum ValueRepr {
     Int(i64),
     Float(f64),
     Tag(u32),
+    Nil,
     Closure(GcPtr<ClosureData>),
 }
 
