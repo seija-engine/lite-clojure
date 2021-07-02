@@ -70,9 +70,15 @@ impl<'a> ParseCST<'a> {
     fn parse_dispatch(&mut self) -> Result<CExpr,CSTError> {
         match self.source.next() {
             Some('^') => self.parse_meta(),
+            Some('_') => self.parse_discard(),
             Some(c) => Err(CSTError::InvalidChar(c)),
             None => Err(CSTError::ErrEof)
         }
+    }
+
+    fn parse_discard(&mut self) -> Result<CExpr,CSTError> {
+        self.parse()?;
+        self.parse()
     }
 
     fn parse_un_quote(&mut self) -> Result<CExpr,CSTError> {
@@ -509,7 +515,7 @@ impl<'a> ParseCST<'a> {
 
 #[test]
 fn test_parse() {
-   let code_string = std::fs::read_to_string("tests/clj/test.clj").unwrap();
+   let code_string = std::fs::read_to_string("tests/test.clj").unwrap();
   
    let mut parser = ParseCST::new(&code_string);
    let ret = parser.parse_exprs();
