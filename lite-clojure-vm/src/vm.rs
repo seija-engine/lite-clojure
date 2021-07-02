@@ -1,5 +1,5 @@
 use std::sync::Mutex;
-use crate::vm::gc::{GC,Generation};
+use crate::gc::{GC,Generation};
 pub struct GlobalVmState {
     pub gc: Mutex<GC>
 }

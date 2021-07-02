@@ -1,5 +1,9 @@
 use std::ops::{Deref, DerefMut};
-use crate::{ast::{ast::ASTModule, cexpr::Number, expr::Expr, value::Symbol}, vm::Instruction};
+use lite_clojure_parser::value::Symbol;
+use lite_clojure_vm::instruction::Instruction;
+use lite_clojure_parser::ast::ASTModule;
+use lite_clojure_parser::expr::Expr;
+use lite_clojure_parser::cexpr::Number;
 use super::scoped_map::ScopedMap;
 
 #[derive(Debug)]
@@ -129,8 +133,8 @@ impl Compiler {
 
 #[test]
 fn test_compiler() {
-   use crate::ast::cst::{ParseCST};
-   use crate::ast::ast::TranslateToAST;
+   use lite_clojure_parser::cst::ParseCST;
+   use lite_clojure_parser::ast::TranslateToAST;
    let file_name = "tests/clj/test.clj";
    let code_string = std::fs::read_to_string(file_name).unwrap();
    let mut parser = ParseCST::new(&code_string);

@@ -1,7 +1,7 @@
 use mem::size_of;
 
-use crate::vm::gc::gc::{GcPtr,CloneUnrooted,CopyUnrooted,GcRef};
-use crate::vm::instruction::{Instruction};
+use crate::gc::gc::{GcPtr,CloneUnrooted,CopyUnrooted,GcRef};
+use crate::instruction::{Instruction};
 use std::{char::MAX, mem};
 use std::marker::PhantomData;
 

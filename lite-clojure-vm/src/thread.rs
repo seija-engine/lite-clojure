@@ -1,9 +1,9 @@
-use crate::vm::stack::Stack;
-use crate::vm::gc::{GC,GcPtr,Generation,Move,CloneUnrooted,Borrow};
-use crate::vm::vm::GlobalVmState;
+use crate::stack::Stack;
+use crate::gc::{GC,GcPtr,Generation,Move,CloneUnrooted,Borrow};
+use crate::vm::GlobalVmState;
 use core::f64;
 use std::{any::Any, ops::{Deref, DerefMut,Add,Sub,Mul,Div}, sync::{Arc,Mutex,MutexGuard}};
-use crate::vm::stack::{StackFrame,State,ClosureState};
+use crate::stack::{StackFrame,State,ClosureState};
 use super::{Getable, Value, ValueRepr, Variants, errors::Error, gc::gc::{DataDef, GcRef, OwnedGcRef}, instruction::Instruction, stack::StackState, value::{Callable, ClosureData, ClosureInitDef}};
 
 

@@ -8,7 +8,7 @@ use std::{
     ops::{Deref, DerefMut},
 };
 
-use crate::vm::Error;
+use crate::Error;
 
 pub unsafe trait Trace {
     unsafe fn root(&mut self) {}
@@ -360,7 +360,7 @@ macro_rules! construct_gc {
     (impl $typ: ident [$($acc: tt)*] [$($ptr: ident)*] @ $field: ident : $expr: expr, $($rest: tt)*) => { {
         let $field = $expr;
         $crate::construct_gc!(impl $typ
-                      [$($acc)* $field: unsafe { $crate::vm::gc::gc::CloneUnrooted::clone_unrooted(&$field) },]
+                      [$($acc)* $field: unsafe { $crate::gc::gc::CloneUnrooted::clone_unrooted(&$field) },]
                       [$($ptr)* $field]
                       $($rest)*
         )
@@ -368,7 +368,7 @@ macro_rules! construct_gc {
 
     (impl $typ: ident [$($acc: tt)*] [$($ptr: ident)*] @ $field: ident, $($rest: tt)*) => {
         $crate::construct_gc!(impl $typ
-                      [$($acc)* $field: unsafe { $crate::vm::gc::CloneUnrooted::clone_unrooted(&$field) },]
+                      [$($acc)* $field: unsafe { $crate::gc::CloneUnrooted::clone_unrooted(&$field) },]
                       [$($ptr)* $field]
                       $($rest)*
         )
@@ -387,7 +387,7 @@ macro_rules! construct_gc {
         #[allow(unused_unsafe)]
         let v = $typ { $($acc)* };
         #[allow(unused_unsafe)]
-        unsafe { $crate::vm::gc::gc::Borrow::with_root(v, root) }
+        unsafe { $crate::gc::gc::Borrow::with_root(v, root) }
     } };
 
     ($typ: ident { $( $tt: tt )* } ) => {
@@ -404,7 +404,7 @@ macro_rules! construct_enum_gc {
     (impl $typ: ident $(:: $variant: ident)? [$($acc: tt)*] [$($ptr: ident)*] @ $expr: expr, $($rest: tt)*) => { {
         let ref ptr = $expr;
         $crate::construct_enum_gc!(impl $typ $(:: $variant)?
-                      [$($acc)* unsafe { $crate::vm::gc::CloneUnrooted::clone_unrooted(ptr) },]
+                      [$($acc)* unsafe { $crate::gc::CloneUnrooted::clone_unrooted(ptr) },]
                       [$($ptr)* ptr]
                       $($rest)*
         )
@@ -421,7 +421,7 @@ macro_rules! construct_enum_gc {
     (impl $typ: ident $(:: $variant: ident)? [$($acc: tt)*] [$($ptr: ident)*] @ $expr: expr) => { {
         let ref ptr = $expr;
         $crate::construct_enum_gc!(impl $typ $(:: $variant)?
-                      [$($acc)* unsafe { $crate::vm::gc::CloneUnrooted::clone_unrooted(ptr) },]
+                      [$($acc)* unsafe { $crate::gc::CloneUnrooted::clone_unrooted(ptr) },]
                       [$($ptr)* ptr]
         )
     } };
@@ -444,7 +444,7 @@ macro_rules! construct_enum_gc {
             _ => unreachable!(),
         }
         #[allow(unused_unsafe)]
-        unsafe { $crate::vm::gc::Borrow::with_root(v, root) }
+        unsafe { $crate::gc::Borrow::with_root(v, root) }
     } };
 }
 
@@ -464,7 +464,7 @@ where
 
 #[cfg(test)]
 mod tests {
-    use crate::vm::gc::gc::{GC,Generation,GcHeader};
+    use crate::gc::gc::{GC,Generation,GcHeader};
     #[test]
     fn test_gc() {
         let mut gc = GC::new(Generation::default(), usize::MAX);

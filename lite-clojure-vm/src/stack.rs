@@ -413,7 +413,7 @@ impl<'a: 'b, 'b, S> StackFrame<'b, S> where S: StackState {
     }
 
     #[inline]
-    pub fn get_value<'vm, 'value, T>(&'value self,thread: &'vm crate::vm::thread::Thread,index: u32) -> Option<T> where T:Getable<'vm,'value> {
+    pub fn get_value<'vm, 'value, T>(&'value self,thread: &'vm crate::thread::Thread,index: u32) -> Option<T> where T:Getable<'vm,'value> {
         self.get_variant(index).map(|v| T::from_value(thread, v))
     }
 
@@ -523,7 +523,7 @@ impl<'a> StackPrimitive for Variants<'a> {
 
 mod tests {
     use super::{Stack, StackFrame, State};
-    use crate::vm::value::{ValueRepr,Value};
+    use crate::value::{ValueRepr,Value};
     #[test]
     fn test_stack() {
        
