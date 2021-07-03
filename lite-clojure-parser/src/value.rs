@@ -7,7 +7,7 @@ use super::{meta::{MetaIndex}};
 #[derive(Debug,Clone,Hash,Eq,PartialEq)]
 pub struct Symbol {
     ns:Option<String>,
-    name:String,
+    pub name:String,
     pub meta:Option<MetaIndex>
 }
 

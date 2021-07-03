@@ -1,4 +1,7 @@
+use crate::errors::CSTError;
+
 use super::{cexpr::{CExpr}, errors::{ASTError}, expr::Expr, meta::MetaTable, value::Symbol};
+use super::cst::ParseCST;
 pub struct ASTModule {
     pub file_name:String,
     pub exprs:Vec<Expr>
@@ -11,6 +14,7 @@ pub struct TranslateToAST {
 
     exprs:Vec<Expr>,
 }
+
 
 impl TranslateToAST {
     pub fn new(file_name:String,cexprs:Vec<CExpr>,meta_table:MetaTable<CExpr>) -> Self {
@@ -33,23 +37,33 @@ impl TranslateToAST {
 
     fn translate_cexpr(&mut self,cexpr:CExpr) {
         //TODO 宏展开
-        let expr = self.analyze(cexpr).unwrap();
-        dbg!(&expr);
-        self.exprs.push(expr);
+        if let Some(az) = self.analyze(cexpr) {
+            match az {
+               Ok(v) => {
+                   self.exprs.push(v)
+               },
+               Err(err) => { dbg!(err); }
+            }
+        }
     }
 
-    fn analyze(&mut self,cexpr:CExpr) -> Result<Expr,ASTError> {
+    
+    fn analyze(&mut self,cexpr:CExpr) -> Option<Result<Expr,ASTError>> {
        match cexpr {
-           CExpr::Nil => Ok(Expr::Nil),
-           CExpr::Boolean(b) => Ok(Expr::Boolean(b)),
-           CExpr::Symbol(sym) => self.analyze_sym(sym),
-           CExpr::Number(_raw,num)  => Ok(Expr::Number(num)),
-           CExpr::Keyword(key) => Ok(Expr::Keyword(key)),
-           CExpr::String(str) => Ok(Expr::String(str)),
+           CExpr::Nil => Some(Ok(Expr::Nil)),
+           CExpr::Boolean(b) => Some(Ok(Expr::Boolean(b))),
+           CExpr::Symbol(sym) => Some(self.analyze_sym(sym)),
+           CExpr::Number(_raw,num)  => Some(Ok(Expr::Number(num))),
+           CExpr::Keyword(key) => Some(Ok(Expr::Keyword(key))),
+           CExpr::String(str) => Some(Ok(Expr::String(str))),
+           CExpr::Map(lst) => Some(self.analyze_map(lst)),
+           CExpr::Vector(lst) => Some(self.analyze_vector(lst)),
+           CExpr::Comment(_s) => None,
            _ => {
             if cexpr.is_iseq() {
-                self.analyze_seq(cexpr)
+                Some(self.analyze_seq(cexpr))
             } else {
+                dbg!(cexpr);
                 todo!()
             }
            }
@@ -83,6 +97,28 @@ impl TranslateToAST {
         Err(ASTError::ErrSeq)
     }
 
+    fn analyze_map(&mut self,lst:Vec<CExpr>) -> Result<Expr,ASTError> {
+        let mut lst_expr:Vec<Expr> = vec![];
+        for cexpr in lst {
+          if let Some(v) = self.analyze(cexpr) {
+              let a_expr = v?;
+              lst_expr.push(a_expr);
+          }
+        }
+        Ok(Expr::Map(lst_expr))
+    }
+
+    fn analyze_vector(&mut self,lst:Vec<CExpr>) -> Result<Expr,ASTError> {
+        let mut lst_expr:Vec<Expr> = vec![];
+        for cexpr in lst {
+          if let Some(v) = self.analyze(cexpr) {
+              let a_expr = v?;
+              lst_expr.push(a_expr);
+          }
+        }
+        Ok(Expr::Vector(lst_expr))
+    }
+
     fn parse_case_expr(&mut self) -> Result<Expr,ASTError> {
         todo!()
     }
@@ -94,10 +130,10 @@ impl TranslateToAST {
             return Err(ASTError::ErrIf);
         }
         lst.remove(0);
-        let test_expr = self.analyze(lst.remove(0)).unwrap();
-        let then_expr = self.analyze(lst.remove(0)).unwrap();
+        let test_expr = self.analyze(lst.remove(0)).unwrap().unwrap();
+        let then_expr = self.analyze(lst.remove(0)).unwrap().unwrap();
         let else_expr = if lst.len() > 0 {
-            self.analyze(lst.remove(0)).unwrap()
+            self.analyze(lst.remove(0)).unwrap().unwrap()
         } else {Expr::Nil };
         Ok(Expr::If(Box::new(test_expr),Box::new(then_expr),Box::new(else_expr)))
     }
@@ -117,7 +153,7 @@ impl TranslateToAST {
         let sym =  lst.remove(0).cast_symbol().unwrap();
         let mut init_expr:Option<Box<Expr>> = None;
         if lst.len() > 0 {
-           init_expr = Some(Box::new(self.analyze(lst.remove(0))?));
+           init_expr = Some(Box::new(self.analyze(lst.remove(0)).unwrap()?));
         }
         Ok(Expr::Def(doc_string,sym,init_expr))
     }
@@ -141,9 +177,9 @@ impl TranslateToAST {
         let mut bind_vecs:Vec<Expr> = vec![];
         for _idx in 0..bindings.len() / 2 {
             let cexpr = bindings.remove(0);
-            let sym_expr = self.analyze(cexpr)?;
+            let sym_expr = self.analyze(cexpr).unwrap()?;
             let val_cexpr = bindings.remove(0);
-            let val_expr = self.analyze(val_cexpr)?;
+            let val_expr = self.analyze(val_cexpr).unwrap()?;
             bind_vecs.push(sym_expr);
             bind_vecs.push(val_expr);
         }
@@ -154,7 +190,7 @@ impl TranslateToAST {
     fn parse_do_expr_(&mut self,cexprs:Vec<CExpr>) -> Result<Expr,ASTError> {
         let mut exprs:Vec<Expr> = vec![];
         for cexpr in cexprs {
-            exprs.push(self.analyze(cexpr)?);
+            exprs.push(self.analyze(cexpr).unwrap()?);
         }
         Ok(Expr::Body(exprs))
     }
@@ -162,22 +198,36 @@ impl TranslateToAST {
     fn parse_invoke(&mut self,cexpr:CExpr) -> Result<Expr,ASTError> {
         let mut exprs:Vec<Expr> = vec![];
         for cexpr in cexpr.take_list().unwrap() {
-            exprs.push(self.analyze(cexpr)?);
+            exprs.push(self.analyze(cexpr).unwrap()?);
         }
         Ok(Expr::Invoke(exprs))
     }
 }
-
+ 
+pub fn parse_ast(file_name:String,code_string:&str) -> Result<ASTModule,ASTError> {
+    let mut parser_cst = ParseCST::new(&code_string);
+    let cexprs = parser_cst.parse_exprs();
+    match cexprs  {
+        Ok(cexprs) => {
+            let meta_table = parser_cst.take();
+            let trans = TranslateToAST::new(file_name.to_string(), cexprs, meta_table);
+            let ast_mod = trans.translate();
+            Ok(ast_mod)
+        }
+        Err(err) => {return Err(ASTError::CSTError(err));}
+    }
+}
 
 #[test]
 fn test_trans() {
    use super::cst::ParseCST;
-   let file_name = "tests/clj/test.clj";
+   let file_name = "tests/test.clj";
    let code_string = std::fs::read_to_string(file_name).unwrap();
    let mut parser = ParseCST::new(&code_string);
    let cexprs = parser.parse_exprs().unwrap();
-   let meta_table = parser.take();
+   
 
    let mut trans = TranslateToAST::new(file_name.to_string(), cexprs, meta_table);
-   trans.translate();
+   let ast_mod = trans.translate();
+   dbg!(ast_mod.exprs);
 }

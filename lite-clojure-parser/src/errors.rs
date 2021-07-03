@@ -17,6 +17,7 @@ pub enum CSTError {
 
 #[derive(Debug)]
 pub enum ASTError {
+    CSTError(CSTError),
     ErrSeq,
     ArgErrorDef,
     BadBindingForm,

@@ -34,7 +34,7 @@
           :alpha-blend ["SrcAlpha" "Dst-Alpha"]
           :z-test false}]}
 
-(defn vert-shader [model vp vert color texture mask]
+(defn vert-shader  [^"mode" model vp vert color texture mask]
   (set-position (* model vp vert.pos)))
 
 (defn vert-shader [model vp vert color texture mask]

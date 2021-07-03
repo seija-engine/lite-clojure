@@ -14,5 +14,8 @@ pub enum Expr {
     Let(Vec<Expr>,Box<Expr>,bool),
     Body(Vec<Expr>),
     Invoke(Vec<Expr>),
-    If(Box<Expr>,Box<Expr>,Box<Expr>)
+    If(Box<Expr>,Box<Expr>,Box<Expr>),
+
+    Map(Vec<Expr>),
+    Vector(Vec<Expr>)
 }
