@@ -1,5 +1,6 @@
 use crate::Variable;
 use crate::EvalError;
+use crate::sym_scope::SymbolScopes;
 use crate::variable::Symbol;
 use std::sync::Arc;
 use lite_clojure_parser::expr::Expr;
@@ -14,13 +15,15 @@ struct CallStack {
 
 struct EvalRT {
     pub stack: Vec<Variable>,
+    sym_maps:SymbolScopes
 }
 
 impl EvalRT {
 
     pub fn new() -> EvalRT {
         EvalRT { 
-            stack:vec![] 
+            stack:vec![],
+            sym_maps:SymbolScopes::new()
         }
     }
 
@@ -44,8 +47,14 @@ impl EvalRT {
             Expr::String(str) => Ok(Variable::String(Arc::new(str.to_string()))),
             Expr::Invoke(lst) => self.eval_fn(lst),
             Expr::Def(doc,sym,val) => self.eval_def(sym, val,doc),
+            Expr::Symbol(sym) => Ok(self.relsove_sym(sym)),
             _ => todo!()
         }
+    }
+
+    fn relsove_sym(&self,sym:&ASTSymbol) -> Variable {
+        
+        todo!()
     }
 
     fn eval_def(&mut self,sym:&ASTSymbol,val:&Option<Box<Expr>>,doc:&Option<String>) -> Result<Variable,EvalError> {
@@ -56,12 +65,14 @@ impl EvalRT {
         let idx = self.stack.len();
         let sym_name = Arc::new(sym.name.to_string());
         let var_sym = Symbol::val(sym_name, idx);
+        self.sym_maps.last_scope().push_sym(var_sym);
         self.stack.push(eval_var);
         Ok(Variable::Nil)
     }
 
     fn eval_fn(&mut self,lst:&Vec<Expr>) -> Result<Variable,EvalError> {
-        //let fn_var = self.eval_expr(lst[0])?;
+        let fn_var = self.eval_expr(&lst[0])?;
+        dbg!(fn_var);
         todo!()
     }
 }
