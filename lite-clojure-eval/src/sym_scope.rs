@@ -26,7 +26,7 @@ impl SymbolScopes {
     }
 }
 
-#[derive(Default)]
+#[derive(Default,Debug)]
 pub struct SymbolScope {
     syms:HashMap<Arc<String>,Symbol>
 }

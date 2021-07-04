@@ -12,7 +12,7 @@ pub enum Variable {
 
 #[derive(Debug)]
 pub struct Symbol {
-    is_global:bool,
+    pub is_global:bool,
     pub var_name:Arc<String>,
     stack_index:usize,
 }

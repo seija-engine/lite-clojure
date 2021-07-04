@@ -38,18 +38,29 @@ impl EvalRT {
         }
     }
 
-    fn eval_expr(&mut self,expr:&Expr) -> Result<Variable,EvalError> {
+    fn eval_expr(&mut self,expr:&Expr) -> Result<(),EvalError> {
         match expr {
-            Expr::Boolean(b) => Ok(Variable::Bool(*b)),
-            Expr::Nil => Ok(Variable::Nil),
-            Expr::Number(Number::Int(inum)) => Ok(Variable::Int(*inum)),
-            Expr::Number(Number::Float(fnum)) => Ok(Variable::Float(*fnum)),
-            Expr::String(str) => Ok(Variable::String(Arc::new(str.to_string()))),
-            Expr::Invoke(lst) => self.eval_fn(lst),
-            Expr::Def(doc,sym,val) => self.eval_def(sym, val,doc),
-            Expr::Symbol(sym) => Ok(self.relsove_sym(sym)),
+            Expr::Boolean(b) => self.stack.push(Variable::Bool(*b)),
+            Expr::Nil => self.stack.push(Variable::Nil),
+            Expr::Number(Number::Int(inum)) => {
+                self.stack.push(Variable::Int(*inum));
+            },
+            Expr::Number(Number::Float(fnum)) => {
+                self.stack.push(Variable::Float(*fnum));
+            },
+            Expr::String(str) => {
+               self.stack.push(Variable::String(Arc::new(str.to_owned())));
+            },
+            Expr::Def(doc,sym,val) => {
+                self.eval_def(sym, val, doc)?;
+            },
+            Expr::Invoke(lst) => { self.eval_fn(lst)?; }
+            //Expr::Invoke(lst) => self.eval_fn(lst),
+            //Expr::Def(doc,sym,val) => self.eval_def(sym, val,doc),
+            //Expr::Symbol(sym) => Ok(self.relsove_sym(sym)),
             _ => todo!()
         }
+        Ok(())
     }
 
     fn relsove_sym(&self,sym:&ASTSymbol) -> Variable {
@@ -57,23 +68,32 @@ impl EvalRT {
         todo!()
     }
 
-    fn eval_def(&mut self,sym:&ASTSymbol,val:&Option<Box<Expr>>,doc:&Option<String>) -> Result<Variable,EvalError> {
-        let eval_var = match val {
-            None => Variable::Nil,
-            Some(e) => self.eval_expr(&*e)?
+    fn eval_def(&mut self,sym:&ASTSymbol,val:&Option<Box<Expr>>,doc:&Option<String>) -> Result<(),EvalError> {
+        match val {
+            None =>self.stack.push(Variable::Nil),
+            Some(e) => { self.eval_expr(&*e)?; },
         };
-        let idx = self.stack.len();
+       
+        let idx = self.stack.len() - 1;
         let sym_name = Arc::new(sym.name.to_string());
         let var_sym = Symbol::val(sym_name, idx);
+        
         self.sym_maps.last_scope().push_sym(var_sym);
-        self.stack.push(eval_var);
-        Ok(Variable::Nil)
+        Ok(())
     }
 
-    fn eval_fn(&mut self,lst:&Vec<Expr>) -> Result<Variable,EvalError> {
-        let fn_var = self.eval_expr(&lst[0])?;
-        dbg!(fn_var);
-        todo!()
+    fn eval_fn(&mut self,lst:&Vec<Expr>) -> Result<(),EvalError> {
+        if lst.len() == 0 {
+            return Err(EvalError::ZeroFnList);
+        };
+
+        let first = lst.first().unwrap();
+        self.eval_expr(first)?;
+
+        dbg!("eval fn??");
+        dbg!(&self.stack);
+        dbg!(&self.sym_maps.last_scope());
+        Ok(())
     }
 }
 
