@@ -24,6 +24,10 @@ impl SymbolScopes {
     pub fn last_scope(&mut self) -> &mut SymbolScope {
         self.list.last_mut().unwrap()
     }
+
+    pub fn last_scope_ref(& self) -> &SymbolScope {
+        self.list.last().unwrap()
+    }
 }
 
 #[derive(Default,Debug)]
@@ -34,5 +38,9 @@ pub struct SymbolScope {
 impl SymbolScope {
     pub fn push_sym(&mut self,sym:Symbol) {
         self.syms.insert(sym.var_name.clone(), sym);
+    }
+
+    pub fn find(&self,name:&String) -> Option<Symbol> {
+        self.syms.get(name).map(|v | v.clone())
     }
 }

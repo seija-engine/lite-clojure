@@ -1,3 +1,6 @@
+#[derive(Debug)]
 pub enum EvalError {
-    ZeroFnList
+    ZeroFnList,
+    NotFoundSymbol(String),
+    ListFirstMustFunction
 }
