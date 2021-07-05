@@ -1,9 +1,9 @@
 use super::{cexpr::Number, value::{Keyword, Symbol}};
 
-#[derive(Debug)]
+#[derive(Debug,Clone)]
 pub enum Expr {
     Nil,
-    Fn,
+    Fn(Vec<Symbol>,Vec<Expr>),
     Number(Number),
     Boolean(bool),
     Symbol(Symbol),
@@ -18,4 +18,21 @@ pub enum Expr {
 
     Map(Vec<Expr>),
     Vector(Vec<Expr>)
+}
+
+impl Expr {
+    pub fn case_vector(self) -> Option<Vec<Expr>> {
+        match self {
+            Expr::Vector(lst) => Some(lst),
+            _ => None
+        }
+    }
+
+    pub fn case_sym(self) -> Option<Symbol> {
+        match self {
+            Expr::Symbol(sym) => Some(sym),
+            _ => None
+        }
+    }
+
 }

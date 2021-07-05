@@ -83,7 +83,7 @@ impl TranslateToAST {
         if let Some(sym) = mop.unwrap().cast_sym() {
             if  sym.sym_ns().is_none() {
                 match sym.sym_name() {
-                    "fn*" => {},
+                    "fn" => return self.parse_fn_expr(cexpr),
                     "def" =>  return self.parse_def_expr(cexpr),
                     "loop*" => return self.parse_let_expr(cexpr,true),
                     "let*" =>  return self.parse_let_expr(cexpr, false),
@@ -121,6 +121,25 @@ impl TranslateToAST {
 
     fn parse_case_expr(&mut self) -> Result<Expr,ASTError> {
         todo!()
+    }
+
+    fn parse_fn_expr(&mut self,cexpr:CExpr) -> Result<Expr,ASTError> {
+        //(fn [a b c] a) or (fn ([a] a)  ([a b] b))
+        let mut lst = cexpr.take_list().unwrap();
+        lst.remove(0); //rm fn
+        let is_first_vec = lst.first().unwrap().is_vec();
+        if is_first_vec {
+             let head = self.analyze(lst.remove(0)).unwrap()?;
+             let mut flst = head.case_vector().unwrap();
+             let sym_lst:Vec<Symbol> = flst.drain(..).map(|f| f.case_sym().unwrap()).collect();
+             let mut form_lst:Vec<Expr> = vec![];
+             for item in lst {
+                 form_lst.push(self.analyze(item).unwrap()?);
+             }
+             Ok(Expr::Fn(sym_lst,form_lst))
+        } else {
+            todo!()
+        }
     }
 
     fn parse_if_expr(&mut self,cexpr:CExpr) -> Result<Expr,ASTError> {
@@ -225,9 +244,9 @@ fn test_trans() {
    let code_string = std::fs::read_to_string(file_name).unwrap();
    let mut parser = ParseCST::new(&code_string);
    let cexprs = parser.parse_exprs().unwrap();
-   
+   let meta_table = parser.take();   
 
-   let mut trans = TranslateToAST::new(file_name.to_string(), cexprs, meta_table);
+   let  trans = TranslateToAST::new(file_name.to_string(), cexprs, meta_table);
    let ast_mod = trans.translate();
    dbg!(ast_mod.exprs);
 }

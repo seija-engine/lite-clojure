@@ -1,4 +1,6 @@
 use std::{fmt::{Debug, Formatter, Write}, sync::Arc, usize};
+use lite_clojure_parser::expr::Expr;
+
 use crate::eval_rt::{EvalRT};
 
 #[derive(Debug)]
@@ -21,7 +23,8 @@ impl Variable {
             Variable::Float(v) => format!("{}",v),
             Variable::Symbol(v) => format!("{}",v.var_name),
             Variable::String(v) => format!("{}",v),
-            Variable::Function(_) => String::from("function"),
+            Variable::Function(Function::NativeFn(_)) => String::from("function"),
+            Variable::Function(Function::ClosureFn(_,_)) => String::from("closure"),
             Variable::Nil => "nil".to_string(),
             Variable::Ref(r) => r.get_ref(rt).show_str(rt)
         }
@@ -64,6 +67,10 @@ impl Symbol {
     pub fn index(&self) -> usize {
         self.stack_index
     }
+
+    pub fn set_index(&mut self,idx:usize) {
+        self.stack_index = idx;
+    }
 }
 
 #[derive(Debug)]
@@ -78,16 +85,7 @@ impl VariableRef {
 
 pub  enum Function {
     NativeFn(fn(&EvalRT,args:Vec<VariableRef>) -> Variable),
-    ClosureFn()
-}
-
-impl Function {
-    pub fn call(&self,rt:&EvalRT,args:Vec<VariableRef>) -> Variable {
-        match self {
-            Function::NativeFn(f) => f(rt,args),
-            Function::ClosureFn() => {Variable::Nil }
-        }
-    }
+    ClosureFn(Vec<Symbol>,Vec<Expr>)
 }
 
 impl Debug for Function {
