@@ -37,7 +37,9 @@ impl TranslateToAST {
 
     fn translate_cexpr(&mut self,cexpr:CExpr) {
         //TODO 宏展开
-        if let Some(az) = self.analyze(cexpr) {
+        let new_expr = self.hand_macro(cexpr);
+
+        if let Some(az) = self.analyze(new_expr) {
             match az {
                Ok(v) => {
                    self.exprs.push(v)
@@ -46,6 +48,45 @@ impl TranslateToAST {
             }
         }
     }
+
+    //这里应该是宏展开实现，现在先手写几个关键的展开
+    fn hand_macro (&mut self,cexpr:CExpr) -> CExpr {
+        match cexpr {
+            CExpr::List(lst) => {
+                if let Some(CExpr::Symbol(sym)) = lst.first() {
+                    match sym.name.as_str() {
+                     "defn" => self.ex_defn(lst),   
+                      _=> CExpr::List(lst)
+                    }
+                } else {
+                    CExpr::List(lst)
+                }
+            },  
+            _ => cexpr,
+        }
+    }
+
+    fn ex_defn(&mut self,mut lst:Vec<CExpr>) -> CExpr {
+        //(defn fn_name [args] (seq1 ) (seq 2)) -> (def fn_name (fn [args] (seq1) (seq 2)))
+        lst.remove(0); //defn
+        let name_expr = lst.remove(0);
+        let args_expr = lst.remove(0); //[args]
+        let mut new_lst:Vec<CExpr> = vec![];
+        let def_sym = Symbol::intern(None,String::from("def"));
+        new_lst.push(CExpr::Symbol(def_sym));
+        new_lst.push(name_expr);
+
+        let fn_sym = Symbol::intern(None,String::from("fn"));
+        lst.insert(0, args_expr);
+        lst.insert(0, CExpr::Symbol(fn_sym));
+       
+        new_lst.push(CExpr::List(lst));
+       
+        let ret =CExpr::List(new_lst);
+        ret
+    }
+
+
 
     
     fn analyze(&mut self,cexpr:CExpr) -> Option<Result<Expr,ASTError>> {
@@ -216,7 +257,10 @@ impl TranslateToAST {
     fn parse_invoke(&mut self,cexpr:CExpr) -> Result<Expr,ASTError> {
         let mut exprs:Vec<Expr> = vec![];
         for cexpr in cexpr.take_list().unwrap() {
-            exprs.push(self.analyze(cexpr).unwrap()?);
+            if let Some(e) = self.analyze(cexpr) {
+                exprs.push(e?);
+            }
+            
         }
         Ok(Expr::Invoke(exprs))
     }

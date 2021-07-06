@@ -289,7 +289,16 @@ impl EvalRT {
 #[test]
 fn test_eval() {
     let code = r#"
-      (def max (fn [a b] (if (> a b) (if (< b 2) 666  b) b)))
+      (defn max [a b] 
+        (if (> a b) a b)
+      )
+      (defn print-add [a b]
+        (let [n (+ a b #_5)]
+          (println a "+" b "=" n)
+          n
+        )
+      )
+      (print-add 2 3)
       (println (max 5 1))
     "#;
     let mut rt = EvalRT::new();

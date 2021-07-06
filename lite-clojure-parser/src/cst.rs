@@ -77,8 +77,8 @@ impl<'a> ParseCST<'a> {
     }
 
     fn parse_discard(&mut self) -> Result<CExpr,CSTError> {
-        self.parse()?;
-        self.parse()
+        let skip_expr = self.parse()?;
+        Ok(CExpr::Comment(format!("{}",skip_expr)))
     }
 
     fn parse_un_quote(&mut self) -> Result<CExpr,CSTError> {
