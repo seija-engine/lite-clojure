@@ -85,16 +85,15 @@ impl TranslateToAST {
                 match sym.sym_name() {
                     "fn" => return self.parse_fn_expr(cexpr),
                     "def" =>  return self.parse_def_expr(cexpr),
-                    "loop*" => return self.parse_let_expr(cexpr,true),
-                    "let*" =>  return self.parse_let_expr(cexpr, false),
+                    "loop" => return self.parse_let_expr(cexpr,true),
+                    "let" =>  return self.parse_let_expr(cexpr, false),
                     "if" => return self.parse_if_expr(cexpr),
                     "case*" => return self.parse_case_expr(),
                     _ => return self.parse_invoke(cexpr)
                 }
             }
         }
-        
-        Err(ASTError::ErrSeq)
+        self.parse_invoke(cexpr)
     }
 
     fn analyze_map(&mut self,lst:Vec<CExpr>) -> Result<Expr,ASTError> {

@@ -6,6 +6,7 @@ use crate::variable::Function;
 use crate::variable::Symbol;
 use crate::variable::VariableRef;
 use std::sync::Arc;
+use std::usize;
 use lite_clojure_parser::expr::Expr;
 use lite_clojure_parser::ast::ASTModule;
 use lite_clojure_parser::ast::parse_ast;
@@ -80,6 +81,8 @@ impl EvalRT {
             Expr::Invoke(lst) => { self.eval_invoke(lst,is_push_stack)?;  },
             Expr::Symbol(sym) => { self.relsove_sym(sym)?; },
             Expr::Fn(syms,form) => {self.eval_fn(syms, form)?; },
+            Expr::Let(binds,body,is_loop) => { self.eval_let(binds,body,*is_loop,is_push_stack)?; }
+            Expr::Body(lst) => {self.eval_body(lst)?; },
             //Expr::Invoke(lst) => self.eval_fn(lst),
             //Expr::Symbol(sym) => Ok(self.relsove_sym(sym)),
             _ => todo!()
@@ -87,11 +90,48 @@ impl EvalRT {
         Ok(())
     }
 
+    fn eval_body(&mut self,lst:&Vec<Expr>) -> Result<(),EvalError> {
+        for idx in 0..lst.len() {
+            self.eval_expr(&lst[idx], idx == lst.len() - 1)?;
+        }
+        Ok(())
+    }
+
+    fn enter_let(&mut self) {
+        self.sym_maps.last_scope().push_let();
+        let new_callstack = Callstack {index: self.stack.len()};
+        self.call_stack.push(new_callstack);
+    }
+
+    fn exit_let(&mut self,keep_last:bool) {
+        self.exit_callstack(keep_last);
+        self.sym_maps.last_scope().pop_let();
+    }
+
+    fn eval_let(&mut self,binds:&Vec<Expr>,body:&Box<Expr>,is_loop:bool,is_push_stack:bool) -> Result<(),EvalError> {
+        self.enter_let();
+        //let 放入let变量
+        for idx in 0..binds.len() / 2 {
+            let index = idx * 2;
+            let s = &binds[index];
+            self.eval_expr(&binds[index + 1], true)?;
+            match s {
+                Expr::Symbol(s) => {
+                   let new_sym = Symbol::val(Arc::new(s.name.clone()), self.stack.len() - 1, false);
+                   self.sym_maps.last_scope().push_sym(new_sym);
+                }
+                _ => {}
+            }
+        }
+        self.eval_expr(body, true)?;
+        self.exit_let(true);
+        Ok(())
+    }
+
     fn eval_fn(&mut self,ast_syms:&Vec<ASTSymbol>,form:&Vec<Expr>) -> Result<(),EvalError> {
         let mut syms:Vec<Symbol> = vec![];
         for ast_sym in ast_syms {
-            let mut sym = Symbol::val(Arc::new(ast_sym.name.clone()), 0,true);
-            sym.is_global = false;
+            let  sym = Symbol::val(Arc::new(ast_sym.name.clone()), 0,false);
             syms.push(sym);
         }
         let closure = Arc::new(Function::ClosureFn(syms,form.clone()));
@@ -101,7 +141,11 @@ impl EvalRT {
 
     fn relsove_sym(&mut self,sym:&ASTSymbol) -> Result<(),EvalError> {
         let last_scope = self.sym_maps.last_scope_ref();
-        let n = last_scope.find(&sym.name);
+        let mut n = last_scope.find(&sym.name);
+       if n.is_none() {
+          n =  self.sym_maps.top_scope_ref().find(&sym.name);
+       }
+       
         match n {
             None => Err(EvalError::NotFoundSymbol(sym.name.clone())),
             Some(s) => {
@@ -125,21 +169,27 @@ impl EvalRT {
         Ok(())
     }
 
+
     fn eval_invoke(&mut self,lst:&Vec<Expr>,is_push_stack:bool) -> Result<(),EvalError> {
         if lst.len() == 0 {
             return Err(EvalError::ZeroFnList);
         };
-        self.enter_function();
+        let start_index = self.stack.len();
         for e in lst.iter() {
             self.eval_expr(e,true)?;       
         }
+        self.enter_function(start_index);
+       
         let stack_len = self.stack.len();
         let fn_index = stack_len - lst.len();
         let func = {
             let fn_var = self.get_var(&self.stack[fn_index]);
             match fn_var {
                 Variable::Function(f) => f.clone(),
-                _ => return Err(EvalError::ListFirstMustFunction)
+                _ => {
+                    dbg!(fn_var);
+                    return Err(EvalError::ListFirstMustFunction)
+                }
             }
         };
 
@@ -163,6 +213,7 @@ impl EvalRT {
                     self.sym_maps.last_scope().push_sym(new_sym);
                     var_idx += 1;
                 }
+                
                 let mut idx = 0;
                 let form_len = forms.len() - 1;
                 for form_expr in forms {
@@ -178,12 +229,13 @@ impl EvalRT {
 
     
 
-    fn enter_function(&mut self) {
-        let new_callstack = Callstack {index: self.stack.len()};
+    fn enter_function(&mut self,start_index:usize) {
+        let new_callstack = Callstack {index: start_index};
         self.call_stack.push(new_callstack);
+        self.sym_maps.push_scope();
     }
 
-    fn exit_function(&mut self,keep_last:bool) {
+    fn exit_callstack(&mut self,keep_last:bool) {
         let last_index = self.call_stack.last().unwrap().index;
         let last = self.stack.drain(last_index..).last();
         if keep_last {
@@ -192,6 +244,12 @@ impl EvalRT {
             }
         }
         self.call_stack.pop();
+    }
+
+    fn exit_function(&mut self,keep_last:bool) {
+        self.exit_callstack(keep_last);   
+        self.sym_maps.pop_scope();
+       
     }
 
 
@@ -208,14 +266,15 @@ impl EvalRT {
 #[test]
 fn test_eval() {
     let code = r#"
-      (def fuck (fn [a b]
-        (println (+ a b))  
-        (* a b)
+      (def let-fn (fn [b]
+         (let [num 123]
+             (+ num b)
+         )
       ))
-      (println (fuck 6 2))
+      (println (let-fn 2))
     "#;
     let mut rt = EvalRT::new();
     rt.init();
     rt.eval_string(String::from("test"),code);
-   
+    
 }

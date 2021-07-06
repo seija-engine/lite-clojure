@@ -17,8 +17,16 @@ impl SymbolScopes {
         self.list.push(SymbolScope::default())
     }
 
+    pub fn pop_scope(&mut self) {
+        self.list.pop();
+    }
+
     pub fn top_scope(&mut self) -> &mut SymbolScope {
         &mut self.list[0]
+    }
+
+    pub fn top_scope_ref(& self) -> & SymbolScope {
+        & self.list[0]
     }
 
     pub fn last_scope(&mut self) -> &mut SymbolScope {
@@ -32,15 +40,44 @@ impl SymbolScopes {
 
 #[derive(Default,Debug)]
 pub struct SymbolScope {
+    lets:Vec<LetScope>,
     syms:HashMap<Arc<String>,Symbol>
 }
 
 impl SymbolScope {
     pub fn push_sym(&mut self,sym:Symbol) {
+        if let Some(ls) = self.lets.last_mut() {
+            ls.push_sym(sym);
+            return;
+        }
         self.syms.insert(sym.var_name.clone(), sym);
     }
 
     pub fn find(&self,name:&String) -> Option<Symbol> {
+        for ls in self.lets.iter().rev() {
+            if let Some(find) = ls.syms.get(name) {
+               return Some(find.clone())
+            }
+        }
         self.syms.get(name).map(|v | v.clone())
+    }
+
+    pub fn push_let(&mut self) {
+        self.lets.push(LetScope::default());
+    }
+
+    pub fn pop_let(&mut self) {
+        self.lets.pop();
+    }
+}
+
+#[derive(Default,Debug)]
+struct LetScope {
+  pub  syms:HashMap<Arc<String>,Symbol>
+}
+
+impl LetScope {
+    pub fn push_sym(&mut self,sym:Symbol) {
+        self.syms.insert(sym.var_name.clone(), sym);
     }
 }
