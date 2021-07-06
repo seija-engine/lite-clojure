@@ -77,6 +77,42 @@ pub fn num_mul(rt:&EvalRT,args:Vec<VariableRef>) -> Variable {
 pub fn num_div(rt:&EvalRT,args:Vec<VariableRef>) -> Variable {
     if args.len() == 0 {
         panic!("num_div number zero args");
-     }
+    }
     return number_op(rt, &args, |a,b| a / b, |a,b| a / b);
+}
+
+pub fn num_lt(rt:&EvalRT,args:Vec<VariableRef>) -> Variable {
+    if args.len() < 2 {
+        panic!("num_lt error");
+    }
+    let a = args[0].get_ref(rt).cast_float(rt).unwrap();
+    let b = args[1].get_ref(rt).cast_float(rt).unwrap();
+    Variable::Bool(a < b)
+}
+
+pub fn num_gt(rt:&EvalRT,args:Vec<VariableRef>) -> Variable {
+    if args.len() < 2 {
+        panic!("num_lt error");
+    }
+    let a = args[0].get_ref(rt).cast_float(rt).unwrap();
+    let b = args[1].get_ref(rt).cast_float(rt).unwrap();
+    Variable::Bool(a > b)
+}
+
+pub fn num_le(rt:&EvalRT,args:Vec<VariableRef>) -> Variable {
+    if args.len() < 2 {
+        panic!("num_lt error");
+    }
+    let a = args[0].get_ref(rt).cast_float(rt).unwrap();
+    let b = args[1].get_ref(rt).cast_float(rt).unwrap();
+    Variable::Bool(a <= b)
+}
+
+pub fn num_ge(rt:&EvalRT,args:Vec<VariableRef>) -> Variable {
+    if args.len() < 2 {
+        panic!("num_lt error");
+    }
+    let a = args[0].get_ref(rt).cast_float(rt).unwrap();
+    let b = args[1].get_ref(rt).cast_float(rt).unwrap();
+    Variable::Bool(a >= b)
 }

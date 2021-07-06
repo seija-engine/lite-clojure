@@ -42,6 +42,11 @@ impl EvalRT {
         self.push_native_fn("-", buildin_fn::num_sub);
         self.push_native_fn("*", buildin_fn::num_mul);
         self.push_native_fn("/", buildin_fn::num_div);
+
+        self.push_native_fn("<", buildin_fn::num_lt);
+        self.push_native_fn("<=", buildin_fn::num_le);
+        self.push_native_fn(">", buildin_fn::num_gt);
+        self.push_native_fn(">=", buildin_fn::num_ge);
     }
 
     pub fn push_native_fn(&mut self,name:&str,f:fn(&EvalRT,Vec<VariableRef>) -> Variable ) {
@@ -83,6 +88,7 @@ impl EvalRT {
             Expr::Fn(syms,form) => {self.eval_fn(syms, form)?; },
             Expr::Let(binds,body,is_loop) => { self.eval_let(binds,body,*is_loop,is_push_stack)?; }
             Expr::Body(lst) => {self.eval_body(lst)?; },
+            Expr::If(cond,expr_true,expr_false) => {self.eval_if(cond,expr_true,expr_false,is_push_stack)?; },
             //Expr::Invoke(lst) => self.eval_fn(lst),
             //Expr::Symbol(sym) => Ok(self.relsove_sym(sym)),
             _ => todo!()
@@ -106,6 +112,20 @@ impl EvalRT {
     fn exit_let(&mut self,keep_last:bool) {
         self.exit_callstack(keep_last);
         self.sym_maps.last_scope().pop_let();
+    }
+
+    fn eval_if(&mut self,cond:&Expr,expr_true:&Expr,expr_false:&Expr,is_push_stack:bool) -> Result<(),EvalError> {
+        self.eval_expr(cond, true)?;
+        
+        let last_var = self.stack.pop().unwrap();
+        let is_true = last_var.cast_bool(self).unwrap();  
+        if is_true {
+            self.eval_expr(expr_true, is_push_stack)?;
+            dbg!(&self.stack[13]);
+        } else {
+            self.eval_expr(expr_false, is_push_stack)?;
+        }
+        Ok(())
     }
 
     fn eval_let(&mut self,binds:&Vec<Expr>,body:&Box<Expr>,is_loop:bool,is_push_stack:bool) -> Result<(),EvalError> {
@@ -266,12 +286,8 @@ impl EvalRT {
 #[test]
 fn test_eval() {
     let code = r#"
-      (def let-fn (fn [b]
-         (let [num 123]
-             (+ num b)
-         )
-      ))
-      (println (let-fn 2))
+      (def max (fn [a b] (if (> a b) a b)))
+      (println (max 5 4))
     "#;
     let mut rt = EvalRT::new();
     rt.init();

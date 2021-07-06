@@ -43,6 +43,12 @@ impl Variable {
             _ => None
         }
     }
+    pub fn cast_bool(&self,rt:&EvalRT) -> Option<bool> {
+        match rt.get_var(self) {
+            Variable::Bool(n) => Some(*n),
+            _ => None
+        }
+    }
 }
 
 
