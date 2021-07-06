@@ -3,7 +3,7 @@ use lite_clojure_parser::expr::Expr;
 
 use crate::eval_rt::{EvalRT};
 
-#[derive(Debug)]
+#[derive(Debug,Clone)]
 pub enum Variable {
     Int(i64),
     Float(f64),
@@ -78,7 +78,7 @@ impl Symbol {
     }
 }
 
-#[derive(Debug)]
+#[derive(Debug,Clone)]
 pub struct VariableRef(pub usize);
 
 impl VariableRef {

@@ -121,7 +121,6 @@ impl EvalRT {
         let is_true = last_var.cast_bool(self).unwrap();  
         if is_true {
             self.eval_expr(expr_true, is_push_stack)?;
-            dbg!(&self.stack[13]);
         } else {
             self.eval_expr(expr_false, is_push_stack)?;
         }
@@ -207,7 +206,6 @@ impl EvalRT {
             match fn_var {
                 Variable::Function(f) => f.clone(),
                 _ => {
-                    dbg!(fn_var);
                     return Err(EvalError::ListFirstMustFunction)
                 }
             }
@@ -256,12 +254,14 @@ impl EvalRT {
     }
 
     fn exit_callstack(&mut self,keep_last:bool) {
+        let last_push = if keep_last {
+            Some(self.clone_var(&self.stack.last().unwrap()))
+        } else { None };
+
         let last_index = self.call_stack.last().unwrap().index;
-        let last = self.stack.drain(last_index..).last();
-        if keep_last {
-            if let Some(v) = last {
-                self.stack.push(v);
-            }
+        self.stack.drain(last_index..);
+        if let Some(last_val) = last_push {
+            self.stack.push(last_val);
         }
         self.call_stack.pop();
     }
@@ -279,6 +279,9 @@ impl EvalRT {
             v => v 
         }
     }
+    pub fn clone_var<'a>(&'a self,var:&'a Variable) -> Variable {
+        self.get_var(var).clone()
+    }
 }
 
 
@@ -286,11 +289,10 @@ impl EvalRT {
 #[test]
 fn test_eval() {
     let code = r#"
-      (def max (fn [a b] (if (> a b) a b)))
-      (println (max 5 4))
+      (def max (fn [a b] (if (> a b) (if (< b 2) 666  b) b)))
+      (println (max 5 1))
     "#;
     let mut rt = EvalRT::new();
     rt.init();
     rt.eval_string(String::from("test"),code);
-    
 }
