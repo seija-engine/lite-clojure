@@ -10,7 +10,7 @@ pub enum Variable {
     Bool(bool),
     Symbol(Symbol),
     String(Arc<String>),
-    Function(Function),
+    Function(Arc<Function>),
     Ref(VariableRef),
     Nil,
 }
@@ -23,8 +23,7 @@ impl Variable {
             Variable::Float(v) => format!("{}",v),
             Variable::Symbol(v) => format!("{}",v.var_name),
             Variable::String(v) => format!("{}",v),
-            Variable::Function(Function::NativeFn(_)) => String::from("function"),
-            Variable::Function(Function::ClosureFn(_,_)) => String::from("closure"),
+            Variable::Function(_) => String::from("function"),
             Variable::Nil => "nil".to_string(),
             Variable::Ref(r) => r.get_ref(rt).show_str(rt)
         }
@@ -56,9 +55,9 @@ pub struct Symbol {
 
 impl Symbol {
     pub fn is_global(&self) -> bool { self.is_global }
-    pub fn val(name:Arc<String>,index:usize) -> Symbol {
+    pub fn val(name:Arc<String>,index:usize,is_global:bool) -> Symbol {
         Symbol {
-            is_global: true,
+            is_global: is_global,
             var_name: name,
             stack_index: index
         }

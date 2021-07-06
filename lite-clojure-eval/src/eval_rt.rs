@@ -44,9 +44,9 @@ impl EvalRT {
     }
 
     pub fn push_native_fn(&mut self,name:&str,f:fn(&EvalRT,Vec<VariableRef>) -> Variable ) {
-        let f_var = Variable::Function(Function::NativeFn(f));
+        let f_var = Variable::Function(Arc::new(Function::NativeFn(f)));
         self.stack.push(f_var);
-        let fn_sym = Symbol::val(Arc::new(name.to_string()), self.stack.len() - 1);
+        let fn_sym = Symbol::val(Arc::new(name.to_string()), self.stack.len() - 1,true);
         self.sym_maps.top_scope().push_sym(fn_sym);
     }
 
@@ -90,11 +90,11 @@ impl EvalRT {
     fn eval_fn(&mut self,ast_syms:&Vec<ASTSymbol>,form:&Vec<Expr>) -> Result<(),EvalError> {
         let mut syms:Vec<Symbol> = vec![];
         for ast_sym in ast_syms {
-            let mut sym = Symbol::val(Arc::new(ast_sym.name.clone()), 0);
+            let mut sym = Symbol::val(Arc::new(ast_sym.name.clone()), 0,true);
             sym.is_global = false;
             syms.push(sym);
         }
-        let closure = Function::ClosureFn(syms,form.clone());
+        let closure = Arc::new(Function::ClosureFn(syms,form.clone()));
         self.stack.push(Variable::Function(closure));
         Ok(())
     }
@@ -119,7 +119,7 @@ impl EvalRT {
        
         let idx = self.stack.len() - 1;
         let sym_name = Arc::new(sym.name.to_string());
-        let var_sym = Symbol::val(sym_name, idx);
+        let var_sym = Symbol::val(sym_name, idx,true);
         
         self.sym_maps.last_scope().push_sym(var_sym);
         Ok(())
@@ -135,62 +135,43 @@ impl EvalRT {
         }
         let stack_len = self.stack.len();
         let fn_index = stack_len - lst.len();
-        
-        let mut closure_syms:Vec<Symbol> = vec![];
-        let mut is_closure = false;
-        {
+        let func = {
             let fn_var = self.get_var(&self.stack[fn_index]);
             match fn_var {
-                Variable::Function(f) => {
-                    let cur_idx = fn_index + 1;
-                    let mut args:Vec<VariableRef> = vec![];
-                    for i in 0..(lst.len() - 1) {
-                        args.push(VariableRef(cur_idx + i));
-                    }
-                    match f {
-                      Function::NativeFn(nf) => {
-                        let ret = nf(self,args);
-                        if is_push_stack { self.stack.push(ret) };
-                      } ,
-                      Function::ClosureFn(syms,_) => {
-                        is_closure = true;
-                          let mut  var_idx = 1;
-                          for sym in syms {
-                              let mut new_sym = Symbol::val(Arc::new(sym.var_name.to_string()), fn_index + var_idx);
-                              new_sym.is_global = false;
-                              closure_syms.push(new_sym);
-                              //self.sym_maps.last_scope().push_sym(new_sym);
-                              var_idx += 1;
-                          }
-                      }
-                    };
-                    
-                    
-                },
-                _ => {
-                    self.exit_function(false);
-                    return Err(EvalError::ListFirstMustFunction)
+                Variable::Function(f) => f.clone(),
+                _ => return Err(EvalError::ListFirstMustFunction)
+            }
+        };
+
+        let cur_idx = fn_index + 1;
+        let mut args:Vec<VariableRef> = vec![];
+        for i in 0..(lst.len() - 1) {
+            args.push(VariableRef(cur_idx + i));
+        }
+
+        let func_ref:&Function = &func;
+        match func_ref {
+            Function::NativeFn(nf) => {
+                let ret = nf(self,args);
+                if is_push_stack { self.stack.push(ret) };
+            },
+            Function::ClosureFn(syms,forms) => {
+                let mut  var_idx = 1;
+                //把函数参数push入栈
+                for sym in syms {
+                    let new_sym = Symbol::val(Arc::new(sym.var_name.to_string()), fn_index + var_idx,false); 
+                    self.sym_maps.last_scope().push_sym(new_sym);
+                    var_idx += 1;
+                }
+                let mut idx = 0;
+                let form_len = forms.len() - 1;
+                for form_expr in forms {
+                   self.eval_expr(&form_expr,form_len == idx )?;
+                   idx += 1;
                 }
             }
         };
-        if is_closure {
-            for item in closure_syms.drain(..) {
-                self.sym_maps.last_scope().push_sym(item);
-            }
-            let fn_var = self.get_var(&self.stack[fn_index]);
-            match fn_var {
-                Variable::Function(Function::ClosureFn(_,form)) => {
-                   let mut idx = 0;
-                   let form_len = form.len() - 1;
-                   for form_expr in form.clone() {
-                     
-                      self.eval_expr(&form_expr,form_len == idx )?;
-                      idx += 1;
-                   }
-                }
-                _ => {}
-            }
-        }
+      
         self.exit_function(is_push_stack);
         Ok(())
     }
@@ -236,6 +217,5 @@ fn test_eval() {
     let mut rt = EvalRT::new();
     rt.init();
     rt.eval_string(String::from("test"),code);
-    dbg!(rt.stack);
-    dbg!(rt.sym_maps.last_scope());
+   
 }
