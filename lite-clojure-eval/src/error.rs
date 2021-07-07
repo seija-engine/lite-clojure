@@ -2,5 +2,6 @@
 pub enum EvalError {
     ZeroFnList,
     NotFoundSymbol(String),
-    ListFirstMustFunction
+    ListFirstMustFunction,
+    FunctionArgCountError
 }

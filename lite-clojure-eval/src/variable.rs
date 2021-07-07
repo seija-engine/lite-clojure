@@ -12,6 +12,8 @@ pub enum Variable {
     String(Arc<String>),
     Function(Arc<Function>),
     Ref(VariableRef),
+    Array(Vec<Variable>),
+    Char(char),
     Nil,
 }
 
@@ -23,9 +25,21 @@ impl Variable {
             Variable::Float(v) => format!("{}",v),
             Variable::Symbol(v) => format!("{}",v.var_name),
             Variable::String(v) => format!("{}",v),
+            Variable::Char(chr) => format!("'{}'",chr),
             Variable::Function(_) => String::from("function"),
             Variable::Nil => "nil".to_string(),
-            Variable::Ref(r) => r.get_ref(rt).show_str(rt)
+            Variable::Ref(r) => r.get_ref(rt).show_str(rt),
+            Variable::Array(lst) => {
+                let mut lst_string:String = String::default();
+                for idx in 0..lst.len() {
+                    let elem = &lst[idx];
+                    lst_string.push_str(elem.show_str(rt).as_str());
+                    if idx < lst.len() - 1 {
+                        lst_string.push(' ');
+                    }
+                };
+                format!("[{}]",lst_string)
+            }
         }
     }
 
@@ -46,6 +60,13 @@ impl Variable {
     pub fn cast_bool(&self,rt:&EvalRT) -> Option<bool> {
         match rt.get_var(self) {
             Variable::Bool(n) => Some(*n),
+            _ => None
+        }
+    }
+
+    pub fn cast_vec<'a>(&'a self,rt:&'a EvalRT) -> Option<&'a Vec<Variable>> {
+        match rt.get_var(self) {
+            Variable::Array(arr) => Some(arr),
             _ => None
         }
     }
@@ -90,7 +111,12 @@ impl VariableRef {
 
 pub  enum Function {
     NativeFn(fn(&EvalRT,args:Vec<VariableRef>) -> Variable),
-    ClosureFn(Vec<Symbol>,Vec<Expr>)
+    ClosureFn(ClosureData)
+}
+
+pub struct ClosureData {
+    pub args:Vec<Symbol>,
+    pub body:Vec<Expr>
 }
 
 impl Debug for Function {

@@ -1,7 +1,9 @@
 use crate::Variable;
 use crate::EvalError;
 use crate::buildin_fn;
+use crate::sym_scope::SymbolScope;
 use crate::sym_scope::SymbolScopes;
+use crate::variable::ClosureData;
 use crate::variable::Function;
 use crate::variable::Symbol;
 use crate::variable::VariableRef;
@@ -47,6 +49,8 @@ impl EvalRT {
         self.push_native_fn("<=", buildin_fn::num_le);
         self.push_native_fn(">", buildin_fn::num_gt);
         self.push_native_fn(">=", buildin_fn::num_ge);
+
+        self.push_native_fn("nth", buildin_fn::nth);
     }
 
     pub fn push_native_fn(&mut self,name:&str,f:fn(&EvalRT,Vec<VariableRef>) -> Variable ) {
@@ -89,6 +93,7 @@ impl EvalRT {
             Expr::Let(binds,body,is_loop) => { self.eval_let(binds,body,*is_loop,is_push_stack)?; }
             Expr::Body(lst) => {self.eval_body(lst)?; },
             Expr::If(cond,expr_true,expr_false) => {self.eval_if(cond,expr_true,expr_false,is_push_stack)?; },
+            Expr::Vector(lst) => {self.eval_list(lst, is_push_stack)?; },
             //Expr::Invoke(lst) => self.eval_fn(lst),
             //Expr::Symbol(sym) => Ok(self.relsove_sym(sym)),
             _ => todo!()
@@ -100,6 +105,16 @@ impl EvalRT {
         for idx in 0..lst.len() {
             self.eval_expr(&lst[idx], idx == lst.len() - 1)?;
         }
+        Ok(())
+    }
+
+    fn eval_list(&mut self,lst:&Vec<Expr>,is_push_stack:bool) -> Result<(),EvalError> {
+        let idx = self.stack.len();
+        for idx in 0..lst.len() {
+            self.eval_expr(&lst[idx], true)?;
+        }
+        let var_lst:Vec<Variable> = self.stack.drain(idx..).collect();
+        self.stack.push(Variable::Array(var_lst));
         Ok(())
     }
 
@@ -148,14 +163,75 @@ impl EvalRT {
     }
 
     fn eval_fn(&mut self,ast_syms:&Vec<ASTSymbol>,form:&Vec<Expr>) -> Result<(),EvalError> {
+        dbg!(form);
+        self.az_closure_syms(form);
         let mut syms:Vec<Symbol> = vec![];
         for ast_sym in ast_syms {
             let  sym = Symbol::val(Arc::new(ast_sym.name.clone()), 0,false);
             syms.push(sym);
         }
-        let closure = Arc::new(Function::ClosureFn(syms,form.clone()));
+        let closure_data = ClosureData {args:syms,body:form.clone() };
+        let closure = Arc::new(Function::ClosureFn(closure_data));
         self.stack.push(Variable::Function(closure));
         Ok(())
+    }
+    /*
+      (defn gen-closure [a b]
+         (let [var 123]
+           (fn [c]
+              (let [d 123]
+                 (+ a b c var d)
+              )
+           )
+         )
+      )
+    */
+    fn az_closure_syms(&mut self,forms:&Vec<Expr>) {
+        let mut fn_scope = SymbolScope::default();
+        let mut not_found_syms:Vec<ASTSymbol> = vec![];
+        for expr in forms {
+            self.az_expr(&mut fn_scope, expr, &mut not_found_syms)
+        }
+        dbg!(not_found_syms);
+    }
+
+    fn az_expr(&mut self,scope:&mut SymbolScope,expr:&Expr,not_found_syms:&mut Vec<ASTSymbol>) {
+        dbg!(expr);
+        match expr {
+            Expr::Body(lst) => {
+                lst.iter().for_each(|e|  self.az_expr(scope, e, not_found_syms))
+            },
+            Expr::If(cond,e_true,e_false) => {
+                self.az_expr(scope, cond, not_found_syms);
+                self.az_expr(scope, e_true, not_found_syms);
+                self.az_expr(scope, e_false, not_found_syms);
+            },
+            Expr::Invoke(froms) => {
+                dbg!(froms);
+                froms.iter().for_each(|e|  self.az_expr(scope, e, not_found_syms))
+            },
+            Expr::Vector(lst) => {
+                lst.iter().for_each(|e|  self.az_expr(scope, e, not_found_syms))
+            },
+            Expr::Let(binds,body,_) => {
+                scope.push_let();
+                for idx in 0..binds.len() / 2 {
+                    let cur_expr = binds[idx].clone();
+                    let ast_sym = cur_expr.case_sym().unwrap();
+                    let sym = Symbol::val(Arc::new(String::from(ast_sym.sym_name())), 0, false);
+                    scope.push_sym(sym);
+                }
+                self.az_expr(scope, body, not_found_syms);
+                scope.pop_let();
+            },
+            Expr::Symbol(sym) => {
+                dbg!(sym);
+                if scope.find(&sym.name).is_none() {
+                    not_found_syms.push(sym.clone());
+                }
+            },
+            _ => ()
+        }
     }
 
     fn relsove_sym(&mut self,sym:&ASTSymbol) -> Result<(),EvalError> {
@@ -223,18 +299,21 @@ impl EvalRT {
                 let ret = nf(self,args);
                 if is_push_stack { self.stack.push(ret) };
             },
-            Function::ClosureFn(syms,forms) => {
+            Function::ClosureFn(closure_data) => {
+                if args.len() != closure_data.args.len() {
+                    return Err(EvalError::FunctionArgCountError);
+                }
                 let mut  var_idx = 1;
                 //把函数参数push入栈
-                for sym in syms {
+                for sym in &closure_data.args {
                     let new_sym = Symbol::val(Arc::new(sym.var_name.to_string()), fn_index + var_idx,false); 
                     self.sym_maps.last_scope().push_sym(new_sym);
                     var_idx += 1;
                 }
                 
                 let mut idx = 0;
-                let form_len = forms.len() - 1;
-                for form_expr in forms {
+                let form_len = closure_data.body.len() - 1;
+                for form_expr in &closure_data.body {
                    self.eval_expr(&form_expr,form_len == idx )?;
                    idx += 1;
                 }
@@ -289,17 +368,11 @@ impl EvalRT {
 #[test]
 fn test_eval() {
     let code = r#"
-      (defn max [a b] 
-        (if (> a b) a b)
+      (defn gen-closure [a b]
+         (fn [c]
+            (+ a b c)
+         )
       )
-      (defn print-add [a b]
-        (let [n (+ a b #_5)]
-          (println a "+" b "=" n)
-          n
-        )
-      )
-      (print-add 2 3)
-      (println (max 5 1))
     "#;
     let mut rt = EvalRT::new();
     rt.init();

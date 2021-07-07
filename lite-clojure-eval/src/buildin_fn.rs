@@ -92,7 +92,7 @@ pub fn num_lt(rt:&EvalRT,args:Vec<VariableRef>) -> Variable {
 
 pub fn num_gt(rt:&EvalRT,args:Vec<VariableRef>) -> Variable {
     if args.len() < 2 {
-        panic!("num_lt error");
+        panic!("num_gt error");
     }
     let a = args[0].get_ref(rt).cast_float(rt).unwrap();
     let b = args[1].get_ref(rt).cast_float(rt).unwrap();
@@ -101,7 +101,7 @@ pub fn num_gt(rt:&EvalRT,args:Vec<VariableRef>) -> Variable {
 
 pub fn num_le(rt:&EvalRT,args:Vec<VariableRef>) -> Variable {
     if args.len() < 2 {
-        panic!("num_lt error");
+        panic!("num_le error");
     }
     let a = args[0].get_ref(rt).cast_float(rt).unwrap();
     let b = args[1].get_ref(rt).cast_float(rt).unwrap();
@@ -110,9 +110,24 @@ pub fn num_le(rt:&EvalRT,args:Vec<VariableRef>) -> Variable {
 
 pub fn num_ge(rt:&EvalRT,args:Vec<VariableRef>) -> Variable {
     if args.len() < 2 {
-        panic!("num_lt error");
+        panic!("num_ge error");
     }
     let a = args[0].get_ref(rt).cast_float(rt).unwrap();
     let b = args[1].get_ref(rt).cast_float(rt).unwrap();
     Variable::Bool(a >= b)
+}
+
+pub fn nth(rt:&EvalRT,args:Vec<VariableRef>) -> Variable {
+    if args.len() < 2 {
+        panic!("nth error");
+    }
+    let lst = args[0].get_ref(rt).cast_vec(rt).unwrap();
+    let idx = args[1].get_ref(rt).cast_int(rt).unwrap() as usize;
+    if idx < lst.len() {
+        return lst[idx].clone()
+    }
+    if args.len() > 2 {
+       return args[2].get_ref(rt).clone();
+    }
+    panic!("index out range");
 }
