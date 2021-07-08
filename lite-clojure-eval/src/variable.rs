@@ -1,18 +1,39 @@
-use std::{cell::RefCell, collections::HashMap, fmt::{Debug, Formatter, Write}, sync::Arc, usize};
+use std::{cell::RefCell, collections::HashMap, fmt::{Debug, Formatter, Write}, rc::Rc, sync::Arc, usize};
+use gc::{Gc,GcCell,Finalize,Trace,GcCellRef,GcCellRefMut };
 use lite_clojure_parser::expr::Expr;
 
 use crate::eval_rt::{EvalRT};
 
-#[derive(Debug,Clone)]
+#[derive(Debug,Clone,Finalize,Trace)]
+pub struct  GcRefCell<T:Trace + Finalize + 'static>(Gc<GcCell<T>>);
+
+impl<T> GcRefCell<T> where T:Trace + Finalize {
+
+    pub fn new(val:T) -> GcRefCell<T> {
+        GcRefCell(Gc::new(GcCell::new(val)))
+    }
+
+    pub fn borrow(&self) -> GcCellRef<'_,T> {
+        let b:&GcCell<T> = &self.0;
+        b.borrow()
+    }
+
+    pub fn borrow_mut(&self) -> GcCellRefMut<'_,T> {
+        let b:&GcCell<T> = &self.0;
+        b.borrow_mut()
+    }
+}
+
+#[derive(Debug,Clone,Finalize,Trace)]
 pub enum Variable {
     Int(i64),
     Float(f64),
     Bool(bool),
     Symbol(Symbol),
-    String(Arc<String>),
-    Function(Arc<Function>),
-    Ref(VariableRef),
-    Array(Vec<Variable>),
+    String(GcRefCell<String>),
+    Function(Gc<Function>),
+    //Ref(VariableRef),
+    Array(GcRefCell<Vec<Variable>>),
     Char(char),
     Nil,
 }
@@ -24,17 +45,17 @@ impl Variable {
             Variable::Bool(v) => format!("{}",v),
             Variable::Float(v) => format!("{}",v),
             Variable::Symbol(v) => format!("{}",v.var_name),
-            Variable::String(v) => format!("{}",v),
+            Variable::String(v) => format!("{}",v.borrow()),
             Variable::Char(chr) => format!("'{}'",chr),
             Variable::Function(_) => String::from("function"),
             Variable::Nil => "nil".to_string(),
-            Variable::Ref(r) => r.get_ref(rt).show_str(rt),
             Variable::Array(lst) => {
                 let mut lst_string:String = String::default();
-                for idx in 0..lst.len() {
-                    let elem = &lst[idx];
+                let lst_ref = lst.borrow();
+                for idx in 0..lst_ref.len() {
+                    let elem = &lst_ref[idx];
                     lst_string.push_str(elem.show_str(rt).as_str());
-                    if idx < lst.len() - 1 {
+                    if idx < lst_ref.len() - 1 {
                         lst_string.push(' ');
                     }
                 };
@@ -44,49 +65,48 @@ impl Variable {
     }
 
     pub fn cast_int(&self,rt:&EvalRT) -> Option<i64> {
-        match rt.get_var(self) {
+        match self {
             Variable::Int(n) => Some(*n),
             _ => None
         }
     }
 
     pub fn cast_float(&self,rt:&EvalRT) -> Option<f64> {
-        match rt.get_var(self) {
+        match self {
             Variable::Float(n) => Some(*n),
             Variable::Int(n) => Some(*n as f64),
             _ => None
         }
     }
     pub fn cast_bool(&self,rt:&EvalRT) -> Option<bool> {
-        match rt.get_var(self) {
+        match self {
             Variable::Bool(n) => Some(*n),
             _ => None
         }
     }
 
-    pub fn cast_vec<'a>(&'a self,rt:&'a EvalRT) -> Option<&'a Vec<Variable>> {
-        match rt.get_var(self) {
-            Variable::Array(arr) => Some(arr),
+    pub fn cast_vec(&self,rt:&EvalRT) -> Option<GcRefCell<Vec<Variable>>> {
+        match self {
+            Variable::Array(arr) => Some(arr.clone()),
             _ => None
         }
     }
 }
 
 
-#[derive(Debug,Clone)]
+#[derive(Debug,Clone,Finalize,Trace)]
 pub struct Symbol {
-    pub is_global:bool,
-    pub var_name:Arc<String>,
+    pub var_name:String,
     stack_index:usize,
+    pub bind_value:Option<Rc<GcCell<Variable>>>
 }
 
 impl Symbol {
-    pub fn is_global(&self) -> bool { self.is_global }
-    pub fn val(name:Arc<String>,index:usize,is_global:bool) -> Symbol {
+    pub fn val(name:String,index:usize) -> Symbol {
         Symbol {
-            is_global: is_global,
             var_name: name,
-            stack_index: index
+            stack_index: index,
+            bind_value:None
         }
     }
 
@@ -99,27 +119,20 @@ impl Symbol {
     }
 }
 
-#[derive(Debug,Clone)]
-pub struct VariableRef(pub usize);
 
-impl VariableRef {
-    pub fn get_ref<'a>(&self,rt:&'a EvalRT) -> &'a Variable {
-        rt.get_var(&rt.stack[self.0])
-    }
-   
-}
 
-#[derive(Clone)]
+#[derive(Finalize,Trace)]
 pub  enum Function {
-    NativeFn(fn(&EvalRT,args:Vec<VariableRef>) -> Variable),
+    NativeFn(#[unsafe_ignore_trace] fn(&EvalRT,args:Vec<Variable>) -> Variable),
     ClosureFn(ClosureData)
 }
 
-#[derive(Debug,Clone)]
+#[derive(Debug,Finalize,Trace)]
 pub struct ClosureData {
     pub args:Vec<Symbol>,
+    #[unsafe_ignore_trace]
     pub body:Vec<Expr>,
-    pub cap_vars:Option<RefCell<HashMap<String,Variable>>>
+    pub cap_vars:Option<HashMap<String,Symbol>>
 }
 
 impl Debug for Function {

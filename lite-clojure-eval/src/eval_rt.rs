@@ -5,13 +5,14 @@ use crate::sym_scope::SymbolScope;
 use crate::sym_scope::SymbolScopes;
 use crate::variable::ClosureData;
 use crate::variable::Function;
+use crate::variable::GcRefCell;
 use crate::variable::Symbol;
-use crate::variable::VariableRef;
-use std::borrow::Borrow;
-use std::cell::RefCell;
 use std::collections::HashMap;
+use std::rc::Rc;
 use std::sync::Arc;
 use std::usize;
+use gc::Gc;
+use gc::GcCell;
 use lite_clojure_parser::expr::Expr;
 use lite_clojure_parser::ast::ASTModule;
 use lite_clojure_parser::ast::parse_ast;
@@ -54,13 +55,13 @@ impl EvalRT {
         self.push_native_fn(">", buildin_fn::num_gt);
         self.push_native_fn(">=", buildin_fn::num_ge);
 
-        self.push_native_fn("nth", buildin_fn::nth);
+        //self.push_native_fn("nth", buildin_fn::nth);
     }
 
-    pub fn push_native_fn(&mut self,name:&str,f:fn(&EvalRT,Vec<VariableRef>) -> Variable ) {
-        let f_var = Variable::Function(Arc::new(Function::NativeFn(f)));
+    pub fn push_native_fn(&mut self,name:&str,f:fn(&EvalRT,Vec<Variable>) -> Variable ) {
+        let f_var = Variable::Function(Gc::new(Function::NativeFn(f)));
         self.stack.push(f_var);
-        let fn_sym = Symbol::val(Arc::new(name.to_string()), self.stack.len() - 1,true);
+        let fn_sym = Symbol::val(name.to_string(), self.stack.len() - 1);
         self.sym_maps.top_scope().push_sym(fn_sym);
     }
 
@@ -86,7 +87,7 @@ impl EvalRT {
                 if is_push_stack { self.stack.push(Variable::Float(*fnum)) };
             },
             Expr::String(str) => {
-                if is_push_stack { self.stack.push(Variable::String(Arc::new(str.to_owned()))) };
+                if is_push_stack { self.stack.push(Variable::String(GcRefCell::new(str.to_owned()))) };
             },
             Expr::Def(doc,sym,val) => {
                 self.eval_def(sym, val, doc)?;
@@ -119,7 +120,7 @@ impl EvalRT {
         }
 
         let var_lst:Vec<Variable> = self.stack.drain(idx..).collect();
-        if is_push_stack { self.stack.push(Variable::Array(var_lst)) };
+        if is_push_stack { self.stack.push(Variable::Array(GcRefCell::new(var_lst))) };
         Ok(())
     }
 
@@ -156,7 +157,7 @@ impl EvalRT {
             self.eval_expr(&binds[index + 1], true)?;
             match s {
                 Expr::Symbol(s) => {
-                   let new_sym = Symbol::val(Arc::new(s.name.clone()), self.stack.len() - 1, false);
+                   let new_sym = Symbol::val(s.name.clone(), self.stack.len() - 1);
                    self.sym_maps.last_scope().push_sym(new_sym);
                 }
                 _ => {}
@@ -170,14 +171,14 @@ impl EvalRT {
     fn eval_fn(&mut self,ast_syms:&Vec<ASTSymbol>,form:&Vec<Expr>) -> Result<(),EvalError> {
         let mut syms:Vec<Symbol> = vec![];
         for ast_sym in ast_syms {
-            let  sym = Symbol::val(Arc::new(ast_sym.name.clone()), 0,false);
+            let  sym = Symbol::val(ast_sym.name.clone(), 0);
             syms.push(sym);
         }
         let mut closure_data = ClosureData {args:syms,body:form.clone(),cap_vars: None};
         if let Some(cap_map) = self.az_closure_syms(ast_syms,form)? {
-            closure_data.cap_vars = Some(RefCell::new(cap_map));
+            closure_data.cap_vars = Some(cap_map);
         }
-        let closure = Arc::new(Function::ClosureFn(closure_data));
+        let closure = Gc::new(Function::ClosureFn(closure_data));
         self.stack.push(Variable::Function(closure));
         Ok(())
     }
@@ -192,11 +193,11 @@ impl EvalRT {
          )
       )
     */
-    fn az_closure_syms(&mut self,ast_syms:&Vec<ASTSymbol>,forms:&Vec<Expr>) -> Result<Option<HashMap<String,Variable>>,EvalError>  {
+    fn az_closure_syms(&mut self,ast_syms:&Vec<ASTSymbol>,forms:&Vec<Expr>) -> Result<Option<HashMap<String,Symbol>>,EvalError>  {
         let mut fn_scope = SymbolScope::default();
         let mut not_found_syms:Vec<ASTSymbol> = vec![];
         for sym in ast_syms {
-            let sym = Symbol::val(Arc::new(String::from(sym.sym_name())), 0, false);
+            let sym = Symbol::val(String::from(sym.sym_name()), 0);
             fn_scope.push_sym(sym);
         }
         for expr in forms {
@@ -205,12 +206,14 @@ impl EvalRT {
         if not_found_syms.is_empty() {
             return Ok(None);
         }
-        let mut hash_map:HashMap<String,Variable> = HashMap::new();
+        let mut hash_map:HashMap<String,Symbol> = HashMap::new();
         for ast_sym in not_found_syms {
            if let Some(sym) = self.sym_maps.deep_find(&ast_sym.name) {
-               let var_ref = Variable::Ref(VariableRef(sym.index()));
-               let clone_var = self.clone_var(&var_ref);
-               hash_map.insert(ast_sym.name.clone(), clone_var);
+               let var_ref = self.stack[sym.index()].clone();
+               let clone_var = var_ref;
+               let mut new_sym = Symbol::val(ast_sym.name.clone(), 0);
+               new_sym.bind_value = Some(Rc::new(GcCell::new(clone_var)));
+               hash_map.insert(ast_sym.name.clone(), new_sym);
            }
         }
         Ok(Some(hash_map))
@@ -238,7 +241,7 @@ impl EvalRT {
                 for idx in 0..binds.len() / 2 {
                     let cur_expr = binds[idx].clone();
                     let ast_sym = cur_expr.case_sym().unwrap();
-                    let sym = Symbol::val(Arc::new(String::from(ast_sym.sym_name())), 0, false);
+                    let sym = Symbol::val(String::from(ast_sym.sym_name()), 0);
                     scope.push_sym(sym);
                 }
                 self.az_expr(scope, body, not_found_syms);
@@ -257,14 +260,22 @@ impl EvalRT {
     fn relsove_sym(&mut self,sym:&ASTSymbol) -> Result<(),EvalError> {
         let last_scope = self.sym_maps.last_scope_ref();
         let mut n = last_scope.find(&sym.name);
-       if n.is_none() {
+        if n.is_none() {
           n =  self.sym_maps.top_scope_ref().find(&sym.name);
-       }
-       
+        }
+        
+        
         match n {
             None => Err(EvalError::NotFoundSymbol(sym.name.clone())),
             Some(s) => {
-                self.stack.push(Variable::Ref(VariableRef(s.index())));
+                if let Some(inner) = &s.bind_value {
+                    let cell:&GcCell<Variable> = inner;
+                    let var = cell.borrow().clone();
+                    self.stack.push(var);
+                    return Ok(());
+                }
+                let clone_var = self.stack[s.index()].clone();
+                self.stack.push(clone_var);
                 Ok(())
             }
         }
@@ -277,8 +288,7 @@ impl EvalRT {
         };
        
         let idx = self.stack.len() - 1;
-        let sym_name = Arc::new(sym.name.to_string());
-        let var_sym = Symbol::val(sym_name, idx,true);
+        let var_sym = Symbol::val(sym.name.to_string(), idx);
         
         self.sym_maps.last_scope().push_sym(var_sym);
         Ok(())
@@ -298,7 +308,7 @@ impl EvalRT {
         let stack_len = self.stack.len();
         let fn_index = stack_len - lst.len();
         let func = {
-            let fn_var = self.get_var(&self.stack[fn_index]);
+            let fn_var = &self.stack[fn_index];
             match fn_var {
                 Variable::Function(f) => f.clone(),
                 _ => {
@@ -306,12 +316,13 @@ impl EvalRT {
                 }
             }
         };
-        self.enter_function(start_index,func.clone());
+        self.enter_function(start_index);
 
         let cur_idx = fn_index + 1;
-        let mut args:Vec<VariableRef> = vec![];
+        let mut args:Vec<Variable> = vec![];
         for i in 0..(lst.len() - 1) {
-            args.push(VariableRef(cur_idx + i));
+            let var = self.stack[cur_idx + i].clone();
+            args.push(var);
         }
 
         let func_ref:&Function = &func;
@@ -327,18 +338,16 @@ impl EvalRT {
                 let mut  var_idx = 1;
                 //把函数参数push入栈
                 for sym in &closure_data.args {
-                    let new_sym = Symbol::val(Arc::new(sym.var_name.to_string()), fn_index + var_idx,false); 
+                    let new_sym = Symbol::val(sym.var_name.to_string(), fn_index + var_idx); 
                     self.sym_maps.last_scope().push_sym(new_sym);
                     var_idx += 1;
                 }
 
                 //把闭包捕获的变量入栈
                 if let Some(cap_vars) = &closure_data.cap_vars {
-                    let vars = cap_vars.borrow();
-                    for (k,v) in vars.iter() {
-                        self.stack.push(v.clone());
-                        let sym = Symbol::val(Arc::new(k.to_owned()), self.stack.len() - 1,false); 
-                        self.sym_maps.last_scope().push_sym(sym);
+                    let vars = cap_vars;
+                    for (_,v) in vars.iter() {
+                        self.sym_maps.last_scope().push_sym(v.clone());
                     }
                 }
                 
@@ -357,15 +366,15 @@ impl EvalRT {
 
     
 
-    fn enter_function(&mut self,start_index:usize,func:Arc<Function>) {
-        let new_callstack = Callstack {index: start_index,func:Some(func)};
+    fn enter_function(&mut self,start_index:usize) {
+        let new_callstack = Callstack {index: start_index,func:None};
         self.call_stack.push(new_callstack);
         self.sym_maps.push_scope();
     }
 
     fn exit_callstack(&mut self,keep_last:bool) {
         let last_push = if keep_last {
-            Some(self.clone_var(&self.stack.last().unwrap()))
+            Some(self.stack.last().unwrap().clone())
         } else { None };
 
         let last_index = self.call_stack.last().unwrap().index;
@@ -383,15 +392,8 @@ impl EvalRT {
     }
 
 
-    pub fn get_var<'a>(&'a self,var:&'a Variable) -> &'a Variable {
-        match var {
-            Variable::Ref(r) => self.get_var(&self.stack[r.0]),
-            v => v 
-        }
-    }
-    pub fn clone_var<'a>(&'a self,var:&'a Variable) -> Variable {
-        self.get_var(var).clone()
-    }
+ 
+    
 }
 
 
@@ -409,6 +411,7 @@ fn test_eval() {
      (def f2 (gen-closure 1 2)) 
      (println (f2 6))
      (println (f2 1))
+     (println [1 2 3 4])
     "#;
     let mut rt = EvalRT::new();
     rt.init();

@@ -50,7 +50,7 @@ impl SymbolScopes {
 #[derive(Default,Debug)]
 pub struct SymbolScope {
     lets:Vec<LetScope>,
-    syms:HashMap<Arc<String>,Symbol>
+    syms:HashMap<String,Symbol>
 }
 
 impl SymbolScope {
@@ -82,7 +82,7 @@ impl SymbolScope {
 
 #[derive(Default,Debug)]
 struct LetScope {
-  pub  syms:HashMap<Arc<String>,Symbol>
+  pub  syms:HashMap<String,Symbol>
 }
 
 impl LetScope {
