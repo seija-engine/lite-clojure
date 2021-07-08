@@ -34,6 +34,7 @@ pub enum Variable {
     Function(Gc<Function>),
     //Ref(VariableRef),
     Array(GcRefCell<Vec<Variable>>),
+    Var(String),
     Char(char),
     Nil,
 }
@@ -49,6 +50,7 @@ impl Variable {
             Variable::Char(chr) => format!("'{}'",chr),
             Variable::Function(_) => String::from("function"),
             Variable::Nil => "nil".to_string(),
+            Variable::Var(s) =>format!("#'{}",s),
             Variable::Array(lst) => {
                 let mut lst_string:String = String::default();
                 let lst_ref = lst.borrow();
@@ -64,30 +66,37 @@ impl Variable {
         }
     }
 
-    pub fn cast_int(&self,rt:&EvalRT) -> Option<i64> {
+    pub fn cast_int(&self,_rt:&EvalRT) -> Option<i64> {
         match self {
             Variable::Int(n) => Some(*n),
             _ => None
         }
     }
 
-    pub fn cast_float(&self,rt:&EvalRT) -> Option<f64> {
+    pub fn cast_float(&self,_rt:&EvalRT) -> Option<f64> {
         match self {
             Variable::Float(n) => Some(*n),
             Variable::Int(n) => Some(*n as f64),
             _ => None
         }
     }
-    pub fn cast_bool(&self,rt:&EvalRT) -> Option<bool> {
+    pub fn cast_bool(&self,_rt:&EvalRT) -> Option<bool> {
         match self {
             Variable::Bool(n) => Some(*n),
             _ => None
         }
     }
 
-    pub fn cast_vec(&self,rt:&EvalRT) -> Option<GcRefCell<Vec<Variable>>> {
+    pub fn cast_vec(&self,_rt:&EvalRT) -> Option<GcRefCell<Vec<Variable>>> {
         match self {
             Variable::Array(arr) => Some(arr.clone()),
+            _ => None
+        }
+    }
+
+    pub fn cast_var(&self,_rt:&EvalRT) -> Option<String> {
+        match self {
+            Variable::Var(s) => Some(s.clone()),
             _ => None
         }
     }
@@ -123,7 +132,7 @@ impl Symbol {
 
 #[derive(Finalize,Trace)]
 pub  enum Function {
-    NativeFn(#[unsafe_ignore_trace] fn(&EvalRT,args:Vec<Variable>) -> Variable),
+    NativeFn(#[unsafe_ignore_trace] fn(&mut EvalRT,args:Vec<Variable>) -> Variable),
     ClosureFn(ClosureData)
 }
 

@@ -12,7 +12,8 @@ pub enum CSTError {
     UnsupportedCharacter(String),
     ErrSymbol(String),
     ErrMetadata,
-    ErrEof
+    ErrEof,
+    ErrQuoteVar
 }
 
 #[derive(Debug)]

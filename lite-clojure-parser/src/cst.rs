@@ -71,6 +71,15 @@ impl<'a> ParseCST<'a> {
         match self.source.next() {
             Some('^') => self.parse_meta(),
             Some('_') => self.parse_discard(),
+            Some('\'') => {
+                match self.parse() {
+                    Ok(CExpr::Symbol(sym)) => {
+                       Ok(CExpr::QuoteVar(sym))
+                    }
+                    Ok(_) => return Err(CSTError::ErrQuoteVar),
+                    Err(err) => return Err(err)
+                }
+            },
             Some(c) => Err(CSTError::InvalidChar(c)),
             None => Err(CSTError::ErrEof)
         }

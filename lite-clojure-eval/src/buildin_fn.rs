@@ -1,6 +1,6 @@
 use crate::{Variable, eval_rt::{EvalRT}};
  
-pub fn print(rt:&EvalRT,args:Vec<Variable>,is_line:bool) -> Variable {
+pub fn print(rt:&mut EvalRT,args:Vec<Variable>,is_line:bool) -> Variable {
     let mut out_string = String::default();
     let mut idx = 0;
     let args_len = args.len();
@@ -19,7 +19,7 @@ pub fn print(rt:&EvalRT,args:Vec<Variable>,is_line:bool) -> Variable {
     Variable::Nil
 }
 
-fn is_number_all_int(rt:&EvalRT,args:&Vec<Variable>) -> bool  {
+fn is_number_all_int(rt:&mut EvalRT,args:&Vec<Variable>) -> bool  {
     for arg in args {
         match arg {
           Variable::Float(_) => { return false },
@@ -30,7 +30,7 @@ fn is_number_all_int(rt:&EvalRT,args:&Vec<Variable>) -> bool  {
     return true;
 }
 
-fn number_op(rt:&EvalRT,args:&Vec<Variable>,fint:fn(i64,i64) -> i64,ffloat:fn(f64,f64) -> f64) -> Variable {
+fn number_op(rt:&mut EvalRT,args:&Vec<Variable>,fint:fn(i64,i64) -> i64,ffloat:fn(f64,f64) -> f64) -> Variable {
     let is_int = is_number_all_int(rt, args);
     let mut iter = args.iter();
     if is_int {
@@ -51,35 +51,35 @@ fn number_op(rt:&EvalRT,args:&Vec<Variable>,fint:fn(i64,i64) -> i64,ffloat:fn(f6
    
 }
 
-pub fn num_add(rt:&EvalRT,args:Vec<Variable>) -> Variable {
+pub fn num_add(rt:&mut EvalRT,args:Vec<Variable>) -> Variable {
     if args.len() == 0 {
         return Variable::Int(0);
     }
     return number_op(rt, &args, |a,b| a + b, |a,b| a + b);
 }
 
-pub fn num_sub(rt:&EvalRT,args:Vec<Variable>) -> Variable {
+pub fn num_sub(rt:&mut EvalRT,args:Vec<Variable>) -> Variable {
     if args.len() == 0 {
        panic!("sum number zero args");
     }
     return number_op(rt, &args, |a,b| a - b, |a,b| a - b);
 }
 
-pub fn num_mul(rt:&EvalRT,args:Vec<Variable>) -> Variable {
+pub fn num_mul(rt:&mut EvalRT,args:Vec<Variable>) -> Variable {
     if args.len() == 0 {
         return Variable::Int(1);
     }
     return number_op(rt, &args, |a,b| a * b, |a,b| a * b);
 }
 
-pub fn num_div(rt:&EvalRT,args:Vec<Variable>) -> Variable {
+pub fn num_div(rt:&mut EvalRT,args:Vec<Variable>) -> Variable {
     if args.len() == 0 {
         panic!("num_div number zero args");
     }
     return number_op(rt, &args, |a,b| a / b, |a,b| a / b);
 }
 
-pub fn num_lt(rt:&EvalRT,args:Vec<Variable>) -> Variable {
+pub fn num_lt(rt:&mut EvalRT,args:Vec<Variable>) -> Variable {
     if args.len() < 2 {
         panic!("num_lt error");
     }
@@ -88,7 +88,7 @@ pub fn num_lt(rt:&EvalRT,args:Vec<Variable>) -> Variable {
     Variable::Bool(a < b)
 }
 
-pub fn num_gt(rt:&EvalRT,args:Vec<Variable>) -> Variable {
+pub fn num_gt(rt:&mut EvalRT,args:Vec<Variable>) -> Variable {
     if args.len() < 2 {
         panic!("num_gt error");
     }
@@ -97,7 +97,7 @@ pub fn num_gt(rt:&EvalRT,args:Vec<Variable>) -> Variable {
     Variable::Bool(a > b)
 }
 
-pub fn num_le(rt:&EvalRT,args:Vec<Variable>) -> Variable {
+pub fn num_le(rt:&mut EvalRT,args:Vec<Variable>) -> Variable {
     if args.len() < 2 {
         panic!("num_le error");
     }
@@ -106,7 +106,7 @@ pub fn num_le(rt:&EvalRT,args:Vec<Variable>) -> Variable {
     Variable::Bool(a <= b)
 }
 
-pub fn num_ge(rt:&EvalRT,args:Vec<Variable>) -> Variable {
+pub fn num_ge(rt:&mut EvalRT,args:Vec<Variable>) -> Variable {
     if args.len() < 2 {
         panic!("num_ge error");
     }
@@ -115,7 +115,7 @@ pub fn num_ge(rt:&EvalRT,args:Vec<Variable>) -> Variable {
     Variable::Bool(a >= b)
 }
 
-pub fn nth(rt:&EvalRT,args:Vec<Variable>) -> Variable {
+pub fn nth(rt:&mut EvalRT,args:Vec<Variable>) -> Variable {
     if args.len() < 2 {
         panic!("nth error");
     }
@@ -131,4 +131,27 @@ pub fn nth(rt:&EvalRT,args:Vec<Variable>) -> Variable {
        return args[2].clone();
     }
     panic!("index out range");
+}
+
+pub fn var_set(rt:&mut EvalRT,mut args: Vec<Variable>) -> Variable {
+   if args.len() < 2 {
+       panic!("var_set error");
+   }
+   let var_name = args.remove(0).cast_var(rt).unwrap();
+   let set_val = args.remove(0);
+   let len = rt.sym_maps.list.len();
+   let scope = &rt.sym_maps.list[len - 2];
+   
+   let find_sym = scope.find(&var_name).or(rt.sym_maps.top_scope().find(&var_name));
+ 
+   if let Some(sym ) = find_sym {
+       if let Some(bind_value) = &sym.bind_value {
+           *bind_value.borrow_mut() = set_val;
+       } else {
+           rt.stack[sym.index()] = set_val;
+       }
+   } else {
+       eprintln!("not found var {}",&var_name);
+   }
+   Variable::Nil
 }

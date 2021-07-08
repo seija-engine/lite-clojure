@@ -99,6 +99,7 @@ impl TranslateToAST {
            CExpr::String(str) => Some(Ok(Expr::String(str))),
            CExpr::Map(lst) => Some(self.analyze_map(lst)),
            CExpr::Vector(lst) => Some(self.analyze_vector(lst)),
+           CExpr::QuoteVar(s) => Some(Ok(Expr::QuoteVar(s))),
            CExpr::Comment(_s) => None,
            _ => {
             if cexpr.is_iseq() {

@@ -18,6 +18,7 @@ pub enum CExpr {
     Map(Vec<CExpr>),
     Meta(Vec<CExpr>),
     Quote(Box<CExpr>),
+    QuoteVar(Symbol),
     SyntaxQuote(Box<CExpr>),
     Dref(Box<CExpr>),
     UnQuote(Box<CExpr>),
@@ -105,6 +106,7 @@ impl fmt::Display for CExpr {
     fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
         match self {
             CExpr::Nil => write!(f,"nil"),
+            CExpr::QuoteVar(s) => write!(f,"#'{}",s),
             CExpr::Boolean(b) => write!(f,"{}",b),
             CExpr::Keyword(kv) => write!(f,"{}",kv),
             CExpr::String(str) => write!(f,"\"{}\"",str),

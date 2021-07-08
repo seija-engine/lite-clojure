@@ -2,7 +2,7 @@ use std::{collections::HashMap, string, sync::Arc};
 use crate::variable::Symbol;
 
 pub struct SymbolScopes {
-    list:Vec<SymbolScope>
+   pub list:Vec<SymbolScope>
 }
 
 impl SymbolScopes {
@@ -45,6 +45,18 @@ impl SymbolScopes {
         }
         return  None;
     }
+
+    pub fn find_local_or_top(&self,name:&String) -> Option<Symbol> {
+       if let Some(s) = self.last_scope_ref().find(name) {
+           return Some(s);
+       }
+       if let Some(s) = self.top_scope_ref().find(name) {
+        return Some(s);
+    }
+       None
+    }
+
+    
 }
 
 #[derive(Default,Debug)]

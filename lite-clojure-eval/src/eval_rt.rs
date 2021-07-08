@@ -8,6 +8,7 @@ use crate::variable::Function;
 use crate::variable::GcRefCell;
 use crate::variable::Symbol;
 use std::collections::HashMap;
+use std::collections::HashSet;
 use std::rc::Rc;
 use std::sync::Arc;
 use std::usize;
@@ -29,7 +30,7 @@ struct Callstack {
 pub struct EvalRT {
     pub(crate) stack: Vec<Variable>,
     call_stack:Vec<Callstack>,
-    sym_maps:SymbolScopes
+    pub sym_maps:SymbolScopes
 }
 
 impl EvalRT {
@@ -43,6 +44,7 @@ impl EvalRT {
     }
 
     pub fn init(&mut self) {
+        self.push_native_fn("var-set", buildin_fn::var_set);
         self.push_native_fn("print", |rt,args| buildin_fn::print(rt,args,false));
         self.push_native_fn("println", |rt,args| buildin_fn::print(rt,args,true));
         self.push_native_fn("+", buildin_fn::num_add);
@@ -55,10 +57,10 @@ impl EvalRT {
         self.push_native_fn(">", buildin_fn::num_gt);
         self.push_native_fn(">=", buildin_fn::num_ge);
 
-        //self.push_native_fn("nth", buildin_fn::nth);
+        self.push_native_fn("nth", buildin_fn::nth);
     }
 
-    pub fn push_native_fn(&mut self,name:&str,f:fn(&EvalRT,Vec<Variable>) -> Variable ) {
+    pub fn push_native_fn(&mut self,name:&str,f:fn(&mut EvalRT,Vec<Variable>) -> Variable ) {
         let f_var = Variable::Function(Gc::new(Function::NativeFn(f)));
         self.stack.push(f_var);
         let fn_sym = Symbol::val(name.to_string(), self.stack.len() - 1);
@@ -99,6 +101,11 @@ impl EvalRT {
             Expr::Body(lst) => {self.eval_body(lst)?; },
             Expr::If(cond,expr_true,expr_false) => {self.eval_if(cond,expr_true,expr_false,is_push_stack)?; },
             Expr::Vector(lst) => {self.eval_vector(lst, is_push_stack)?; },
+            Expr::QuoteVar(s) => if is_push_stack { 
+                let str_name = s.name.to_owned();
+                let var =  Variable::Var(str_name );
+                if is_push_stack {self.stack.push(var); }
+            }
             //Expr::Invoke(lst) => self.eval_fn(lst),
             //Expr::Symbol(sym) => Ok(self.relsove_sym(sym)),
             _ => todo!()
@@ -177,6 +184,7 @@ impl EvalRT {
         let mut closure_data = ClosureData {args:syms,body:form.clone(),cap_vars: None};
         if let Some(cap_map) = self.az_closure_syms(ast_syms,form)? {
             closure_data.cap_vars = Some(cap_map);
+            
         }
         let closure = Gc::new(Function::ClosureFn(closure_data));
         self.stack.push(Variable::Function(closure));
@@ -195,7 +203,7 @@ impl EvalRT {
     */
     fn az_closure_syms(&mut self,ast_syms:&Vec<ASTSymbol>,forms:&Vec<Expr>) -> Result<Option<HashMap<String,Symbol>>,EvalError>  {
         let mut fn_scope = SymbolScope::default();
-        let mut not_found_syms:Vec<ASTSymbol> = vec![];
+        let mut not_found_syms:HashSet<ASTSymbol> = HashSet::new();
         for sym in ast_syms {
             let sym = Symbol::val(String::from(sym.sym_name()), 0);
             fn_scope.push_sym(sym);
@@ -203,9 +211,11 @@ impl EvalRT {
         for expr in forms {
             self.az_expr(&mut fn_scope, expr, &mut not_found_syms)
         }
+        
         if not_found_syms.is_empty() {
             return Ok(None);
         }
+       
         let mut hash_map:HashMap<String,Symbol> = HashMap::new();
         for ast_sym in not_found_syms {
            if let Some(sym) = self.sym_maps.deep_find(&ast_sym.name) {
@@ -219,7 +229,7 @@ impl EvalRT {
         Ok(Some(hash_map))
     }
 
-    fn az_expr(&mut self,scope:&mut SymbolScope,expr:&Expr,not_found_syms:&mut Vec<ASTSymbol>) {
+    fn az_expr(&mut self,scope:&mut SymbolScope,expr:&Expr,not_found_syms:&mut HashSet<ASTSymbol>) {
        
         match expr {
             Expr::Body(lst) => {
@@ -239,7 +249,7 @@ impl EvalRT {
             Expr::Let(binds,body,_) => {
                 scope.push_let();
                 for idx in 0..binds.len() / 2 {
-                    let cur_expr = binds[idx].clone();
+                    let cur_expr = binds[idx * 2].clone();
                     let ast_sym = cur_expr.case_sym().unwrap();
                     let sym = Symbol::val(String::from(ast_sym.sym_name()), 0);
                     scope.push_sym(sym);
@@ -250,7 +260,7 @@ impl EvalRT {
             Expr::Symbol(sym) => {
                 let top_scope = self.sym_maps.top_scope_ref();
                 if scope.find(&sym.name).is_none() && top_scope.find(&sym.name).is_none() {
-                    not_found_syms.push(sym.clone());
+                    if !not_found_syms.contains(&sym) {not_found_syms.insert(sym.clone()); };
                 }
             },
             _ => ()
@@ -258,13 +268,8 @@ impl EvalRT {
     }
 
     fn relsove_sym(&mut self,sym:&ASTSymbol) -> Result<(),EvalError> {
-        let last_scope = self.sym_maps.last_scope_ref();
-        let mut n = last_scope.find(&sym.name);
-        if n.is_none() {
-          n =  self.sym_maps.top_scope_ref().find(&sym.name);
-        }
-        
-        
+        let  n = self.sym_maps.find_local_or_top(&sym.name);
+       
         match n {
             None => Err(EvalError::NotFoundSymbol(sym.name.clone())),
             Some(s) => {
@@ -401,17 +406,26 @@ impl EvalRT {
 #[test]
 fn test_eval() {
     let code = r#"
-      (defn gen-closure [a b]
-         (fn [c]
-            (let [d 10]
-                (+ a b c d)
-            )
-         )
+      (def top-var 123)
+      (println top-var)
+      (var-set #'top-var 456)
+      (println top-var)
+
+      (defn mk-iter [count]
+        (fn []
+            
+           (if (> count 0)
+              (var-set #'count (- count 1))
+              (println "success")
+           )
+        )
       )
-     (def f2 (gen-closure 1 2)) 
-     (println (f2 6))
-     (println (f2 1))
-     (println [1 2 3 4])
+      (def iter3 (mk-iter 3))
+      (iter3)
+      (iter3)
+      (iter3)
+      (iter3) 
+      (iter3) 
     "#;
     let mut rt = EvalRT::new();
     rt.init();
