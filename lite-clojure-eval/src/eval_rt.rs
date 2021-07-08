@@ -7,6 +7,9 @@ use crate::variable::ClosureData;
 use crate::variable::Function;
 use crate::variable::Symbol;
 use crate::variable::VariableRef;
+use std::borrow::Borrow;
+use std::cell::RefCell;
+use std::collections::HashMap;
 use std::sync::Arc;
 use std::usize;
 use lite_clojure_parser::expr::Expr;
@@ -17,6 +20,7 @@ use lite_clojure_parser::value::{Symbol as ASTSymbol};
 
 #[derive(Debug)]
 struct Callstack {
+    pub func:Option<Arc<Function>>,
     pub(crate) index: usize,
 }
 
@@ -33,7 +37,7 @@ impl EvalRT {
         EvalRT { 
             stack:vec![],
             sym_maps:SymbolScopes::new(),
-            call_stack:vec![Callstack {index : 0 }]
+            call_stack:vec![Callstack {index : 0 ,func:None}]
         }
     }
 
@@ -93,7 +97,7 @@ impl EvalRT {
             Expr::Let(binds,body,is_loop) => { self.eval_let(binds,body,*is_loop,is_push_stack)?; }
             Expr::Body(lst) => {self.eval_body(lst)?; },
             Expr::If(cond,expr_true,expr_false) => {self.eval_if(cond,expr_true,expr_false,is_push_stack)?; },
-            Expr::Vector(lst) => {self.eval_list(lst, is_push_stack)?; },
+            Expr::Vector(lst) => {self.eval_vector(lst, is_push_stack)?; },
             //Expr::Invoke(lst) => self.eval_fn(lst),
             //Expr::Symbol(sym) => Ok(self.relsove_sym(sym)),
             _ => todo!()
@@ -108,19 +112,20 @@ impl EvalRT {
         Ok(())
     }
 
-    fn eval_list(&mut self,lst:&Vec<Expr>,is_push_stack:bool) -> Result<(),EvalError> {
+    fn eval_vector(&mut self,lst:&Vec<Expr>,is_push_stack:bool) -> Result<(),EvalError> {
         let idx = self.stack.len();
         for idx in 0..lst.len() {
             self.eval_expr(&lst[idx], true)?;
         }
+
         let var_lst:Vec<Variable> = self.stack.drain(idx..).collect();
-        self.stack.push(Variable::Array(var_lst));
+        if is_push_stack { self.stack.push(Variable::Array(var_lst)) };
         Ok(())
     }
 
     fn enter_let(&mut self) {
         self.sym_maps.last_scope().push_let();
-        let new_callstack = Callstack {index: self.stack.len()};
+        let new_callstack = Callstack {index: self.stack.len(),func:None};
         self.call_stack.push(new_callstack);
     }
 
@@ -163,14 +168,15 @@ impl EvalRT {
     }
 
     fn eval_fn(&mut self,ast_syms:&Vec<ASTSymbol>,form:&Vec<Expr>) -> Result<(),EvalError> {
-        dbg!(form);
-        self.az_closure_syms(form);
         let mut syms:Vec<Symbol> = vec![];
         for ast_sym in ast_syms {
             let  sym = Symbol::val(Arc::new(ast_sym.name.clone()), 0,false);
             syms.push(sym);
         }
-        let closure_data = ClosureData {args:syms,body:form.clone() };
+        let mut closure_data = ClosureData {args:syms,body:form.clone(),cap_vars: None};
+        if let Some(cap_map) = self.az_closure_syms(ast_syms,form)? {
+            closure_data.cap_vars = Some(RefCell::new(cap_map));
+        }
         let closure = Arc::new(Function::ClosureFn(closure_data));
         self.stack.push(Variable::Function(closure));
         Ok(())
@@ -186,17 +192,32 @@ impl EvalRT {
          )
       )
     */
-    fn az_closure_syms(&mut self,forms:&Vec<Expr>) {
+    fn az_closure_syms(&mut self,ast_syms:&Vec<ASTSymbol>,forms:&Vec<Expr>) -> Result<Option<HashMap<String,Variable>>,EvalError>  {
         let mut fn_scope = SymbolScope::default();
         let mut not_found_syms:Vec<ASTSymbol> = vec![];
+        for sym in ast_syms {
+            let sym = Symbol::val(Arc::new(String::from(sym.sym_name())), 0, false);
+            fn_scope.push_sym(sym);
+        }
         for expr in forms {
             self.az_expr(&mut fn_scope, expr, &mut not_found_syms)
         }
-        dbg!(not_found_syms);
+        if not_found_syms.is_empty() {
+            return Ok(None);
+        }
+        let mut hash_map:HashMap<String,Variable> = HashMap::new();
+        for ast_sym in not_found_syms {
+           if let Some(sym) = self.sym_maps.deep_find(&ast_sym.name) {
+               let var_ref = Variable::Ref(VariableRef(sym.index()));
+               let clone_var = self.clone_var(&var_ref);
+               hash_map.insert(ast_sym.name.clone(), clone_var);
+           }
+        }
+        Ok(Some(hash_map))
     }
 
     fn az_expr(&mut self,scope:&mut SymbolScope,expr:&Expr,not_found_syms:&mut Vec<ASTSymbol>) {
-        dbg!(expr);
+       
         match expr {
             Expr::Body(lst) => {
                 lst.iter().for_each(|e|  self.az_expr(scope, e, not_found_syms))
@@ -207,7 +228,6 @@ impl EvalRT {
                 self.az_expr(scope, e_false, not_found_syms);
             },
             Expr::Invoke(froms) => {
-                dbg!(froms);
                 froms.iter().for_each(|e|  self.az_expr(scope, e, not_found_syms))
             },
             Expr::Vector(lst) => {
@@ -225,8 +245,8 @@ impl EvalRT {
                 scope.pop_let();
             },
             Expr::Symbol(sym) => {
-                dbg!(sym);
-                if scope.find(&sym.name).is_none() {
+                let top_scope = self.sym_maps.top_scope_ref();
+                if scope.find(&sym.name).is_none() && top_scope.find(&sym.name).is_none() {
                     not_found_syms.push(sym.clone());
                 }
             },
@@ -273,7 +293,7 @@ impl EvalRT {
         for e in lst.iter() {
             self.eval_expr(e,true)?;       
         }
-        self.enter_function(start_index);
+        
        
         let stack_len = self.stack.len();
         let fn_index = stack_len - lst.len();
@@ -286,6 +306,7 @@ impl EvalRT {
                 }
             }
         };
+        self.enter_function(start_index,func.clone());
 
         let cur_idx = fn_index + 1;
         let mut args:Vec<VariableRef> = vec![];
@@ -310,6 +331,16 @@ impl EvalRT {
                     self.sym_maps.last_scope().push_sym(new_sym);
                     var_idx += 1;
                 }
+
+                //把闭包捕获的变量入栈
+                if let Some(cap_vars) = &closure_data.cap_vars {
+                    let vars = cap_vars.borrow();
+                    for (k,v) in vars.iter() {
+                        self.stack.push(v.clone());
+                        let sym = Symbol::val(Arc::new(k.to_owned()), self.stack.len() - 1,false); 
+                        self.sym_maps.last_scope().push_sym(sym);
+                    }
+                }
                 
                 let mut idx = 0;
                 let form_len = closure_data.body.len() - 1;
@@ -326,8 +357,8 @@ impl EvalRT {
 
     
 
-    fn enter_function(&mut self,start_index:usize) {
-        let new_callstack = Callstack {index: start_index};
+    fn enter_function(&mut self,start_index:usize,func:Arc<Function>) {
+        let new_callstack = Callstack {index: start_index,func:Some(func)};
         self.call_stack.push(new_callstack);
         self.sym_maps.push_scope();
     }
@@ -370,9 +401,14 @@ fn test_eval() {
     let code = r#"
       (defn gen-closure [a b]
          (fn [c]
-            (+ a b c)
+            (let [d 10]
+                (+ a b c d)
+            )
          )
       )
+     (def f2 (gen-closure 1 2)) 
+     (println (f2 6))
+     (println (f2 1))
     "#;
     let mut rt = EvalRT::new();
     rt.init();

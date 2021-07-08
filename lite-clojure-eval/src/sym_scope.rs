@@ -33,8 +33,17 @@ impl SymbolScopes {
         self.list.last_mut().unwrap()
     }
 
-    pub fn last_scope_ref(& self) -> &SymbolScope {
+    pub fn last_scope_ref(&self) -> &SymbolScope {
         self.list.last().unwrap()
+    }
+
+    pub fn deep_find(&self,name:&String) -> Option<Symbol> {
+        for scope in self.list.iter().rev() {
+            if let Some(sym) = scope.find(name) {
+                return Some(sym);
+            }
+        }
+        return  None;
     }
 }
 

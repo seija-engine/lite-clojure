@@ -1,4 +1,4 @@
-use std::{fmt::{Debug, Formatter, Write}, sync::Arc, usize};
+use std::{cell::RefCell, collections::HashMap, fmt::{Debug, Formatter, Write}, sync::Arc, usize};
 use lite_clojure_parser::expr::Expr;
 
 use crate::eval_rt::{EvalRT};
@@ -109,14 +109,17 @@ impl VariableRef {
    
 }
 
+#[derive(Clone)]
 pub  enum Function {
     NativeFn(fn(&EvalRT,args:Vec<VariableRef>) -> Variable),
     ClosureFn(ClosureData)
 }
 
+#[derive(Debug,Clone)]
 pub struct ClosureData {
     pub args:Vec<Symbol>,
-    pub body:Vec<Expr>
+    pub body:Vec<Expr>,
+    pub cap_vars:Option<RefCell<HashMap<String,Variable>>>
 }
 
 impl Debug for Function {
