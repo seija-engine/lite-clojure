@@ -7,6 +7,7 @@ use crate::variable::ClosureData;
 use crate::variable::Function;
 use crate::variable::GcRefCell;
 use crate::variable::Symbol;
+use std::collections::BTreeMap;
 use std::collections::HashMap;
 use std::collections::HashSet;
 use std::rc::Rc;
@@ -59,6 +60,9 @@ impl EvalRT {
         self.push_native_fn(">=", buildin_fn::num_ge);
 
         self.push_native_fn("nth", buildin_fn::nth);
+        self.push_native_fn("get", buildin_fn::get);
+        self.push_native_fn("=", buildin_fn::eq);
+
         let core_code = include_str!("core.clj");
         self.eval_string(String::from("core.clj"), core_code);
     }
@@ -109,17 +113,39 @@ impl EvalRT {
             Expr::Body(lst) => {self.eval_body(lst)?; },
             Expr::If(cond,expr_true,expr_false) => {self.eval_if(cond,expr_true,expr_false,is_push_stack)?; },
             Expr::Vector(lst) => {self.eval_vector(lst, is_push_stack)?; },
+            Expr::Map(lst) => {self.eval_map(lst,is_push_stack)?; },
             Expr::QuoteVar(s) => if is_push_stack { 
                 let str_name = s.name.to_owned();
                 let var =  Variable::Var(str_name );
                 if is_push_stack {self.stack.push(var); }
             },
             Expr::Recur(args) => { self.eval_recur(args)?; },
-            //Expr::Invoke(lst) => self.eval_fn(lst),
-            //Expr::Symbol(sym) => Ok(self.relsove_sym(sym)),
-            _ => todo!()
+            Expr::Keyword(k) => {
+                let str = &k.sym.name;
+                if is_push_stack { self.stack.push(Variable::Keyword(GcRefCell::new(str.to_owned()))) };
+            }
+           
         }
         Ok(())
+    }
+
+    fn eval_map(&mut self,lst:&Vec<Expr>,is_push_stack:bool)  -> Result<(),EvalError> {
+        let mut hash_map:HashMap<Variable,Variable> = HashMap::new();
+        for idx in 0..lst.len() / 2 {
+            let index = idx * 2;
+            let key = &lst[index];
+            let value = &lst[index + 1];
+            let stack_len = self.stack.len();
+            self.eval_expr(key, true)?;
+            self.eval_expr(value, true)?;
+            
+            let mut kv:Vec<Variable> = self.stack.drain(stack_len..).collect();
+            hash_map.insert(kv.remove(0), kv.remove(0));
+        }
+        if is_push_stack {
+            self.stack.push(Variable::Map(GcRefCell::new( hash_map)));
+        }
+       Ok(())
     }
 
     fn eval_recur(&mut self,args:&Vec<Expr>)  -> Result<(),EvalError> {
@@ -177,7 +203,7 @@ impl EvalRT {
         self.eval_expr(cond, true)?;
         
         let last_var = self.stack.pop().unwrap();
-        let is_true = last_var.cast_bool(self).unwrap();  
+        let is_true = last_var.cast_bool().unwrap();  
         if is_true {
             self.eval_expr(expr_true, is_push_stack)?;
         } else {
@@ -363,9 +389,18 @@ impl EvalRT {
         let stack_len = self.stack.len();
         let fn_index = stack_len - lst.len();
         let func = {
-            let fn_var = &self.stack[fn_index];
-            match fn_var {
+            let fn_var = self.stack[fn_index].clone();
+            match &fn_var {
                 Variable::Function(f) => f.clone(),
+                Variable::Map(hmap) => {
+                    let key = &self.stack[fn_index + 1];
+                    let h_map_ref:&HashMap<Variable,Variable> = &hmap.borrow();
+                    let get_var = h_map_ref.get(key).map(|v|v.clone()).unwrap_or(Variable::Nil);
+                    self.stack.drain(start_index..);
+                    if is_push_stack {self.stack.push(get_var) }
+                   
+                    return Ok(())
+                },
                 _ => {
                     return Err(EvalError::ListFirstMustFunction)
                 }

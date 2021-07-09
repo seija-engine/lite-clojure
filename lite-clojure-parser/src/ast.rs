@@ -35,11 +35,11 @@ impl TranslateToAST {
         }
     }
 
-    fn translate_cexpr(&mut self,cexpr:CExpr) {
+    fn translate_cexpr(&mut self,mut cexpr:CExpr) {
         //TODO 宏展开
-        let new_expr = self.hand_macro(cexpr);
+        self.hand_macro_expr(&mut cexpr);
 
-        if let Some(az) = self.analyze(new_expr) {
+        if let Some(az) = self.analyze(cexpr) {
             match az {
                Ok(v) => {
                    self.exprs.push(v)
@@ -49,24 +49,31 @@ impl TranslateToAST {
         }
     }
 
-    //这里应该是宏展开实现，现在先手写几个关键的展开
-    fn hand_macro (&mut self,cexpr:CExpr) -> CExpr {
-        match cexpr {
-            CExpr::List(lst) => {
-                if let Some(CExpr::Symbol(sym)) = lst.first() {
-                    match sym.name.as_str() {
-                     "defn" => self.ex_defn(lst),   
-                      _=> CExpr::List(lst)
-                    }
-                } else {
-                    CExpr::List(lst)
-                }
-            },  
-            _ => cexpr,
+    fn hand_macro_list(&mut self,lst:&mut Vec<CExpr>) {
+        for e in lst {
+            self.hand_macro_expr(e);
         }
     }
+    fn hand_macro_expr(&mut self,expr:&mut CExpr) {
+        match expr {
+            CExpr::List(lst) => {
+                match lst.first() {
+                    Some(CExpr::Symbol(sym)) => {
+                        match sym.name.as_str() {
+                            "defn" => self.ex_defn(lst),   
+                            _=> { self.hand_macro_list(lst);  }
+                        }
+                    }
+                    _=> { self.hand_macro_list(lst);  }
+                }
+            }
+            _ => ()
+        }
+        
+    }
 
-    fn ex_defn(&mut self,mut lst:Vec<CExpr>) -> CExpr {
+
+    fn ex_defn(&mut self,lst:&mut Vec<CExpr>)  {
         //(defn fn_name [args] (seq1 ) (seq 2)) -> (def fn_name (fn [args] (seq1) (seq 2)))
         lst.remove(0); //defn
         let name_expr = lst.remove(0);
@@ -80,10 +87,10 @@ impl TranslateToAST {
         lst.insert(0, args_expr);
         lst.insert(0, CExpr::Symbol(fn_sym));
        
-        new_lst.push(CExpr::List(lst));
+        new_lst.push(CExpr::List(lst.clone()));
        
-        let ret =CExpr::List(new_lst);
-        ret
+      
+        *lst = new_lst  
     }
 
 

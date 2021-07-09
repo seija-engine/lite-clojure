@@ -74,7 +74,7 @@ impl fmt::Display for Symbol {
 
 #[derive(Debug,Clone,PartialEq,Eq,Hash)]
 pub struct Keyword {
-    sym:Symbol,
+    pub sym:Symbol,
     pub is_local:bool
 }
 

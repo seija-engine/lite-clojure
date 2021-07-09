@@ -1,4 +1,4 @@
-use std::{collections::HashMap, string, sync::Arc};
+use std::{collections::HashMap};
 use crate::variable::Symbol;
 
 pub struct SymbolScopes {

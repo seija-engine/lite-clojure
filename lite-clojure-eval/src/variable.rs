@@ -1,4 +1,4 @@
-use std::{cell::RefCell, collections::HashMap, fmt::{Debug, Formatter, Write}, rc::Rc, sync::Arc, usize};
+use std::{borrow::Borrow, collections::{HashMap}, fmt::{Debug, Formatter}, rc::Rc, usize};
 use gc::{Gc,GcCell,Finalize,Trace,GcCellRef,GcCellRefMut };
 use lite_clojure_parser::expr::Expr;
 
@@ -31,32 +31,97 @@ pub enum Variable {
     Bool(bool),
     Symbol(Symbol),
     String(GcRefCell<String>),
+    Keyword(GcRefCell<String>),
     Function(Gc<Function>),
-    //Ref(VariableRef),
     Array(GcRefCell<Vec<Variable>>),
+    Map(GcRefCell<HashMap<Variable,Variable>>),
     Var(String),
     Char(char),
     Nil,
 }
 
+impl PartialEq for Variable {
+    fn eq(&self, other: &Self) -> bool {
+        match (self,other) {
+            (Variable::Int(v0),Variable::Int(v1)) => v0 == v1,
+            (Variable::Float(v0),Variable::Float(v1)) => v0 == v1,
+            (Variable::Bool(v0),Variable::Bool(v1)) => v0 == v1,
+            (Variable::Char(v0),Variable::Char(v1)) => v0 == v1,
+            (Variable::Keyword(v0),Variable::Keyword(v1)) => {
+                let str1:&String = &v0.borrow();
+                let str2:&String = &v1.borrow();
+                str1 == str2
+            },
+            (Variable::String(v0),Variable::String(v1)) => {
+                let str1:&String = &v0.borrow();
+                let str2:&String = &v1.borrow();
+                str1 == str2
+            },
+            (Variable::Array(arr),Variable::Array(other_arr)) => {
+                let arr_ref:&Vec<Variable> = &arr.borrow();
+                let other_ref:&Vec<Variable> = &other_arr.borrow();
+                if arr_ref.len() != other_ref.len() {return  false;  }
+                for idx in 0..arr_ref.len() {
+                    if arr_ref[idx] != arr_ref[idx] {
+                        return false;
+                    }
+                }
+                true
+            },
+
+            _ => false
+        }
+    }
+}
+
+impl Eq for Variable {}
+
+impl std::hash::Hash for Variable {
+    fn hash<H: std::hash::Hasher>(&self, state: &mut H) {
+        match self {
+            Variable::Int(v) => v.hash(state),
+            Variable::Bool(v) => v.hash(state),
+            Variable::Char(v) => v.hash(state),
+            Variable::Nil => Variable::Nil.hash(state),
+            Variable::String(s) => s.borrow().hash(state),
+            Variable::Keyword(s) => s.borrow().hash(state),
+            Variable::Symbol(s) => s.borrow().var_name.hash(state),
+            _ => 0.hash(state)
+        }
+    }
+}
+
 impl Variable {
-    pub fn show_str(&self,rt:&EvalRT) -> String {
+    pub fn show_str(&self) -> String {
         match self {
             Variable::Int(v) => format!("{}",v),
             Variable::Bool(v) => format!("{}",v),
             Variable::Float(v) => format!("{}",v),
             Variable::Symbol(v) => format!("{}",v.var_name),
-            Variable::String(v) => format!("{}",v.borrow()),
+            Variable::String(v) => format!("\"{}\"",v.borrow()),
             Variable::Char(chr) => format!("'{}'",chr),
             Variable::Function(_) => String::from("function"),
             Variable::Nil => "nil".to_string(),
+            Variable::Keyword(k) => format!("{}",k.borrow()),
             Variable::Var(s) =>format!("#'{}",s),
+            Variable::Map(maps) => {
+                let mut kv_string = String::from("{");
+                let map:&HashMap<Variable,Variable> =  &maps.borrow();
+                for (k,v) in map {
+                    kv_string.push_str(k.show_str().as_str());
+                    kv_string.push(' ');
+                    kv_string.push_str(v.show_str().as_str());
+                    kv_string.push(' ');
+                }
+                kv_string.push('}');
+                kv_string
+            },
             Variable::Array(lst) => {
                 let mut lst_string:String = String::default();
                 let lst_ref = lst.borrow();
                 for idx in 0..lst_ref.len() {
                     let elem = &lst_ref[idx];
-                    lst_string.push_str(elem.show_str(rt).as_str());
+                    lst_string.push_str(elem.show_str().as_str());
                     if idx < lst_ref.len() - 1 {
                         lst_string.push(' ');
                     }
@@ -66,35 +131,35 @@ impl Variable {
         }
     }
 
-    pub fn cast_int(&self,_rt:&EvalRT) -> Option<i64> {
+    pub fn cast_int(&self) -> Option<i64> {
         match self {
             Variable::Int(n) => Some(*n),
             _ => None
         }
     }
 
-    pub fn cast_float(&self,_rt:&EvalRT) -> Option<f64> {
+    pub fn cast_float(&self) -> Option<f64> {
         match self {
             Variable::Float(n) => Some(*n),
             Variable::Int(n) => Some(*n as f64),
             _ => None
         }
     }
-    pub fn cast_bool(&self,_rt:&EvalRT) -> Option<bool> {
+    pub fn cast_bool(&self) -> Option<bool> {
         match self {
             Variable::Bool(n) => Some(*n),
             _ => None
         }
     }
 
-    pub fn cast_vec(&self,_rt:&EvalRT) -> Option<GcRefCell<Vec<Variable>>> {
+    pub fn cast_vec(&self) -> Option<GcRefCell<Vec<Variable>>> {
         match self {
             Variable::Array(arr) => Some(arr.clone()),
             _ => None
         }
     }
 
-    pub fn cast_var(&self,_rt:&EvalRT) -> Option<String> {
+    pub fn cast_var(&self) -> Option<String> {
         match self {
             Variable::Var(s) => Some(s.clone()),
             _ => None
