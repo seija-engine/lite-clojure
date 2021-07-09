@@ -131,11 +131,29 @@ impl TranslateToAST {
                     "let" =>  return self.parse_let_expr(cexpr, false),
                     "if" => return self.parse_if_expr(cexpr),
                     "case*" => return self.parse_case_expr(),
+                    "recur" => return self.parse_recur_expr(cexpr),
+                    "do" => {
+                        let mut lst = cexpr.take_list().unwrap();
+                        lst.remove(0);
+                        return self.parse_do_expr_(lst)
+                    },
                     _ => return self.parse_invoke(cexpr)
                 }
             }
         }
         self.parse_invoke(cexpr)
+    }
+
+    fn parse_recur_expr(&mut self,cexpr:CExpr)  -> Result<Expr,ASTError> {
+        let mut lst = cexpr.take_list().unwrap();
+        lst.remove(0);
+        let mut arg_list :Vec<Expr> = vec![];
+        for arg in lst {
+           if let Some(v) = self.analyze(arg) {
+               arg_list.push(v?);
+           }
+        }
+        Ok(Expr::Recur(arg_list))
     }
 
     fn analyze_map(&mut self,lst:Vec<CExpr>) -> Result<Expr,ASTError> {

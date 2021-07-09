@@ -10,6 +10,7 @@ pub enum Expr {
     Keyword(Keyword),
     String(String),
     QuoteVar(Symbol),
+    Recur(Vec<Expr>),
 
     Def(Option<String>,Symbol,Option<Box<Expr>>),
     Let(Vec<Expr>,Box<Expr>,bool),

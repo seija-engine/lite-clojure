@@ -10,7 +10,6 @@ use crate::variable::Symbol;
 use std::collections::HashMap;
 use std::collections::HashSet;
 use std::rc::Rc;
-use std::sync::Arc;
 use std::usize;
 use gc::Gc;
 use gc::GcCell;
@@ -20,9 +19,11 @@ use lite_clojure_parser::ast::parse_ast;
 use lite_clojure_parser::cexpr::Number;
 use lite_clojure_parser::value::{Symbol as ASTSymbol};
 
-#[derive(Debug)]
+#[derive(Debug,Clone)]
 struct Callstack {
-    pub func:Option<Arc<Function>>,
+    pub need_loop:bool,
+    is_recur:bool,
+    is_let:bool,
     pub(crate) index: usize,
 }
 
@@ -39,7 +40,7 @@ impl EvalRT {
         EvalRT { 
             stack:vec![],
             sym_maps:SymbolScopes::new(),
-            call_stack:vec![Callstack {index : 0 ,func:None}]
+            call_stack:vec![Callstack {index : 0 ,need_loop:false,is_recur:false,is_let:false}]
         }
     }
 
@@ -58,6 +59,8 @@ impl EvalRT {
         self.push_native_fn(">=", buildin_fn::num_ge);
 
         self.push_native_fn("nth", buildin_fn::nth);
+        let core_code = include_str!("core.clj");
+        self.eval_string(String::from("core.clj"), core_code);
     }
 
     pub fn push_native_fn(&mut self,name:&str,f:fn(&mut EvalRT,Vec<Variable>) -> Variable ) {
@@ -70,6 +73,11 @@ impl EvalRT {
     pub fn eval_string(&mut self,file_name:String,code_string:&str) {
         let ast_module = parse_ast(file_name, code_string).unwrap();
         self.eval_ast_module(ast_module);
+    }
+
+    pub fn eval_file(&mut self,path:&str) {
+        let code = std::fs::read_to_string(path).unwrap();
+        self.eval_string(String::from(path), &code);
     }
 
     pub fn eval_ast_module(&mut self,ast_module:ASTModule) {
@@ -105,10 +113,33 @@ impl EvalRT {
                 let str_name = s.name.to_owned();
                 let var =  Variable::Var(str_name );
                 if is_push_stack {self.stack.push(var); }
-            }
+            },
+            Expr::Recur(args) => { self.eval_recur(args)?; },
             //Expr::Invoke(lst) => self.eval_fn(lst),
             //Expr::Symbol(sym) => Ok(self.relsove_sym(sym)),
             _ => todo!()
+        }
+        Ok(())
+    }
+
+    fn eval_recur(&mut self,args:&Vec<Expr>)  -> Result<(),EvalError> {
+        let call_index = {
+            let callstack = self.find_last_recur_stack().unwrap();
+            callstack.need_loop = true;
+            if callstack.is_let {callstack.index } else {callstack.index + 1 }
+           
+        };
+       
+        for arg in args {
+            self.eval_expr(arg, true)?;
+        }
+        let drain_index = self.stack.len() - args.len();
+        let eval_args:Vec<Variable> = self.stack.drain(drain_index..).collect();
+        let mut idx = 0;
+
+        for arg in eval_args {
+            self.stack[call_index + idx] = arg;
+            idx += 1;
         }
         Ok(())
     }
@@ -131,9 +162,9 @@ impl EvalRT {
         Ok(())
     }
 
-    fn enter_let(&mut self) {
+    fn enter_let(&mut self,need_loop:bool) {
         self.sym_maps.last_scope().push_let();
-        let new_callstack = Callstack {index: self.stack.len(),func:None};
+        let new_callstack = Callstack {index: self.stack.len(),need_loop : need_loop,is_recur:need_loop,is_let:true};
         self.call_stack.push(new_callstack);
     }
 
@@ -156,7 +187,7 @@ impl EvalRT {
     }
 
     fn eval_let(&mut self,binds:&Vec<Expr>,body:&Box<Expr>,is_loop:bool,is_push_stack:bool) -> Result<(),EvalError> {
-        self.enter_let();
+        self.enter_let(is_loop);
         //let 放入let变量
         for idx in 0..binds.len() / 2 {
             let index = idx * 2;
@@ -170,7 +201,26 @@ impl EvalRT {
                 _ => {}
             }
         }
-        self.eval_expr(body, true)?;
+        
+        if is_loop {
+           let body_index = self.stack.len();
+           self.eval_expr(body, true)?;
+           let mut need_loop = self.call_stack.last().unwrap().need_loop;
+           while need_loop {
+              self.call_stack.last_mut().unwrap().need_loop = false;
+              self.eval_expr(body, true)?;
+              need_loop = self.call_stack.last().unwrap().need_loop;
+              if need_loop {
+                  self.stack.drain(body_index..);
+              } else {
+                 let last = self.stack.drain(body_index..).last().unwrap();
+                 self.stack.push(last);
+              }
+           }
+        } else {
+            self.eval_expr(body, is_push_stack)?;
+        }
+       
         self.exit_let(true);
         Ok(())
     }
@@ -321,7 +371,7 @@ impl EvalRT {
                 }
             }
         };
-        self.enter_function(start_index);
+        
 
         let cur_idx = fn_index + 1;
         let mut args:Vec<Variable> = vec![];
@@ -330,9 +380,12 @@ impl EvalRT {
             args.push(var);
         }
 
+        
+
         let func_ref:&Function = &func;
         match func_ref {
             Function::NativeFn(nf) => {
+                self.enter_function(start_index);
                 let ret = nf(self,args);
                 if is_push_stack { self.stack.push(ret) };
             },
@@ -340,6 +393,7 @@ impl EvalRT {
                 if args.len() != closure_data.args.len() {
                     return Err(EvalError::FunctionArgCountError);
                 }
+                self.enter_function(start_index);
                 let mut  var_idx = 1;
                 //把函数参数push入栈
                 for sym in &closure_data.args {
@@ -355,12 +409,18 @@ impl EvalRT {
                         self.sym_maps.last_scope().push_sym(v.clone());
                     }
                 }
-                
-                let mut idx = 0;
-                let form_len = closure_data.body.len() - 1;
-                for form_expr in &closure_data.body {
-                   self.eval_expr(&form_expr,form_len == idx )?;
-                   idx += 1;
+                let body_index = self.stack.len();
+                self.eval_closure(closure_data)?;
+                let mut need_loop = self.call_stack.last().unwrap().need_loop;
+                while need_loop {
+                    self.call_stack.last_mut().unwrap().need_loop = false;
+                    self.eval_closure(closure_data)?;
+                    need_loop = self.call_stack.last().unwrap().need_loop;
+                    let last = self.stack.drain(body_index..).last();
+                    if need_loop == false {
+                        
+                        self.stack.push(last.unwrap());
+                    }
                 }
             }
         };
@@ -369,10 +429,20 @@ impl EvalRT {
         Ok(())
     }
 
+    fn eval_closure(&mut self,closure_data:&ClosureData) -> Result<(),EvalError> {
+        let mut idx = 0;
+        let form_len = closure_data.body.len() - 1;
+        for form_expr in &closure_data.body {
+           self.eval_expr(&form_expr,form_len == idx )?;
+           idx += 1;
+        }
+        Ok(())
+    }
+
     
 
     fn enter_function(&mut self,start_index:usize) {
-        let new_callstack = Callstack {index: start_index,func:None};
+        let new_callstack = Callstack {index: start_index,need_loop:false,is_recur:true,is_let:false};
         self.call_stack.push(new_callstack);
         self.sym_maps.push_scope();
     }
@@ -395,39 +465,13 @@ impl EvalRT {
         self.sym_maps.pop_scope();
        
     }
-
-
- 
     
-}
-
-
-
-#[test]
-fn test_eval() {
-    let code = r#"
-      (def top-var 123)
-      (println top-var)
-      (var-set #'top-var 456)
-      (println top-var)
-
-      (defn mk-iter [count]
-        (fn []
-            
-           (if (> count 0)
-              (var-set #'count (- count 1))
-              (println "success")
-           )
-        )
-      )
-      (def iter3 (mk-iter 3))
-      (iter3)
-      (iter3)
-      (iter3)
-      (iter3) 
-      (iter3) 
-    "#;
-    let mut rt = EvalRT::new();
-    rt.init();
-    rt.eval_string(String::from("test"),code);
+    fn find_last_recur_stack(&mut self) -> Option<&mut Callstack> {
+        for cs in self.call_stack.iter_mut().rev() {
+            if cs.is_recur {
+                return  Some(cs);
+            }
+        }
+        None
+    }
 }
