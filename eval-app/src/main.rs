@@ -1,4 +1,10 @@
 use lite_clojure_eval::{EvalRT};
+use std::time::{SystemTime, UNIX_EPOCH};
+fn clock_realtime() -> i64 {
+    let start = SystemTime::now();
+    let since_the_epoch = start.duration_since(UNIX_EPOCH).expect("Time went backwards");
+    return since_the_epoch.as_millis() as i64;
+}
 
 fn main() {
     let mut args = std::env::args();
@@ -12,7 +18,10 @@ fn main() {
     match code_string {
         Err(err) => {dbg!(err);},
         Ok(string) => {
+            let ts = clock_realtime();
             rt.eval_string(String::from("test"),&string);
+            let dt = clock_realtime() - ts;
+            println!("time={} ms", dt / 1000);
         }
     }
     

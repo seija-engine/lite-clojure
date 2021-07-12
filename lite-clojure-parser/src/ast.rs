@@ -275,7 +275,10 @@ impl TranslateToAST {
     fn parse_do_expr_(&mut self,cexprs:Vec<CExpr>) -> Result<Expr,ASTError> {
         let mut exprs:Vec<Expr> = vec![];
         for cexpr in cexprs {
-            exprs.push(self.analyze(cexpr).unwrap()?);
+            if let Some(e) = self.analyze(cexpr) {
+                exprs.push(e?);
+            }
+           
         }
         Ok(Expr::Body(exprs))
     }
