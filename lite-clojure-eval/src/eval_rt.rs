@@ -74,20 +74,23 @@ impl EvalRT {
         self.sym_maps.top_scope().push_sym(fn_sym);
     }
 
-    pub fn eval_string(&mut self,file_name:String,code_string:&str) {
+    pub fn eval_string(&mut self,file_name:String,code_string:&str) -> Option<Variable> {
         let ast_module = parse_ast(file_name, code_string).unwrap();
-        self.eval_ast_module(ast_module);
+        self.eval_ast_module(ast_module)
     }
 
-    pub fn eval_file(&mut self,path:&str) {
+    pub fn eval_file(&mut self,path:&str) -> Option<Variable> {
         let code = std::fs::read_to_string(path).unwrap();
-        self.eval_string(String::from(path), &code);
+        self.eval_string(String::from(path), &code)
     }
 
-    pub fn eval_ast_module(&mut self,ast_module:ASTModule) {
-        for expr in ast_module.exprs {
-            self.eval_expr(&expr,false).unwrap();
+    pub fn eval_ast_module(&mut self,ast_module:ASTModule) -> Option<Variable> {
+        let last_idx = ast_module.exprs.len() - 1;
+        for idx in 0..ast_module.exprs.len() {
+            let expr = &ast_module.exprs[idx];
+            self.eval_expr(expr,idx == last_idx).unwrap();
         }
+        self.stack.last().map(|v| v.clone())
     }
 
     fn eval_expr(&mut self,expr:&Expr,is_push_stack:bool) -> Result<(),EvalError> {

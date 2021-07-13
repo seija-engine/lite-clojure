@@ -10,6 +10,8 @@ fn test_loop() {
 fn test_map() {
     let mut rt = EvalRT::new();
     rt.init();
-    rt.eval_file("tests/map.clj");
+    if let Some(ret) = rt.eval_file("tests/map.clj") {
+        println!("{:?}",ret);
+    }
 }
 

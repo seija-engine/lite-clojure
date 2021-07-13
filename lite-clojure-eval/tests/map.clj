@@ -3,3 +3,7 @@
 (println (get player :hp))
 (println (player (player :k)))
 
+{
+    :tag "123"
+    
+}
