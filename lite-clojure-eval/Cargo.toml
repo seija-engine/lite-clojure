@@ -9,5 +9,6 @@ default = ["eval_core"]
 eval_core = []
 
 [dependencies]
+serde_json = "1.0.64"
 lite-clojure-parser = {path = "../lite-clojure-parser"}
 gc = { version = "0.4.1", features = ["derive"] }

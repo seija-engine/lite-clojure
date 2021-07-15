@@ -1,4 +1,4 @@
-use std::{borrow::Borrow, collections::{HashMap}, fmt::{Debug, Formatter}, rc::Rc, usize};
+use std::{borrow::Borrow, collections::{HashMap}, fmt::{Debug, Formatter}, iter::Map, rc::Rc, usize};
 use gc::{Gc,GcCell,Finalize,Trace,GcCellRef,GcCellRefMut };
 use lite_clojure_parser::expr::Expr;
 
@@ -145,6 +145,21 @@ impl Variable {
             _ => None
         }
     }
+
+    pub fn cast_string(&self) -> Option<GcRefCell<String>> {
+        match self {
+            Variable::String(n) => Some(n.clone()),
+            _ => None
+        }
+    }
+
+    pub fn cast_keyword(&self) -> Option<GcRefCell<String>> {
+        match self {
+            Variable::String(n) => Some(n.clone()),
+            _ => None
+        }
+    }
+
     pub fn cast_bool(&self) -> Option<bool> {
         match self {
             Variable::Bool(n) => Some(*n),
@@ -155,6 +170,13 @@ impl Variable {
     pub fn cast_vec(&self) -> Option<GcRefCell<Vec<Variable>>> {
         match self {
             Variable::Array(arr) => Some(arr.clone()),
+            _ => None
+        }
+    }
+
+    pub fn cast_map(&self) -> Option<GcRefCell<HashMap<Variable,Variable>>> {
+        match self {
+            Variable::Map(m) => Some(m.clone()),
             _ => None
         }
     }
