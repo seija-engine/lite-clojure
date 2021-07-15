@@ -62,9 +62,12 @@ impl EvalRT {
         self.push_native_fn("nth", buildin_fn::nth);
         self.push_native_fn("get", buildin_fn::get);
         self.push_native_fn("=", buildin_fn::eq);
-
-        let core_code = include_str!("core.clj");
-        self.eval_string(String::from("core.clj"), core_code);
+        
+        #[cfg(feature = "eval_core")]
+        {
+            let core_code = include_str!("core.clj");
+            self.eval_string(String::from("core.clj"), core_code);
+        }
     }
 
     pub fn push_native_fn(&mut self,name:&str,f:fn(&mut EvalRT,Vec<Variable>) -> Variable ) {
