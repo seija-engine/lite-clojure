@@ -40,6 +40,64 @@ pub enum Variable {
     Nil,
 }
 
+impl From<i64> for Variable {
+    fn from(src: i64) -> Variable {
+        Variable::Int(src)
+    }
+}
+
+impl From<f64> for Variable {
+    fn from(src: f64) -> Variable {
+        Variable::Float(src)
+    }
+}
+
+impl From<bool> for Variable {
+    fn from(src: bool) -> Variable {
+        Variable::Bool(src)
+    }
+}
+
+impl From<String> for Variable {
+    fn from(src: String) -> Variable {
+        Variable::String(GcRefCell::new(src))
+    }
+}
+
+impl From<&str> for Variable {
+    fn from(src: &str) -> Variable {
+        Variable::String(GcRefCell::new(src.to_string()))
+    }
+}
+
+impl From<&[Variable]> for Variable {
+    fn from(src: &[Variable]) -> Variable {
+        Variable::Array(GcRefCell::new(src.iter().map(|x: &Variable| x.clone()).collect()))
+    }
+}
+
+impl From<Vec<Variable>> for Variable {
+    fn from(src: Vec<Variable>) -> Variable {
+        Variable::Array(GcRefCell::new(src))
+    }
+}
+
+impl From<&[(Variable, Variable)]> for Variable {
+    fn from(src: &[(Variable, Variable)]) -> Variable {
+        Variable::Map(
+            GcRefCell::new(
+                src.iter().map(|(k, v): &(Variable, Variable)| (k.clone(), v.clone())).collect()
+            )
+        )
+    }
+}
+
+impl From<HashMap<Variable, Variable>> for Variable {
+    fn from(src: HashMap<Variable, Variable>) -> Variable {
+        Variable::Map(GcRefCell::new(src))
+    }
+}
+
 impl PartialEq for Variable {
     fn eq(&self, other: &Self) -> bool {
         match (self,other) {
@@ -218,7 +276,7 @@ impl Symbol {
 
 
 #[derive(Finalize,Trace)]
-pub  enum Function {
+pub enum Function {
     NativeFn(#[unsafe_ignore_trace] fn(&mut EvalRT,args:Vec<Variable>) -> Variable),
     ClosureFn(ClosureData)
 }

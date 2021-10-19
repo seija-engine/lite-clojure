@@ -1,3 +1,5 @@
+use std::fmt::{Display, Formatter};
+
 #[derive(Debug)]
 pub enum CSTError {
     InvalidSymbolChar(char),
@@ -25,3 +27,11 @@ pub enum ASTError {
     ErrLet,
     ErrIf,
 }
+
+impl Display for ASTError {
+    fn fmt(&self, f: &mut Formatter<'_>) -> std::fmt::Result {
+        write!(f, "{:?}", self)
+    }
+}
+
+impl std::error::Error for ASTError {}

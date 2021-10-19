@@ -70,7 +70,17 @@ impl EvalRT {
         }
     }
 
-    pub fn push_native_fn(&mut self,name:&str,f:fn(&mut EvalRT,Vec<Variable>) -> Variable ) {
+    pub fn push_var(&mut self, name: &str, var: impl Into<Variable>) {
+        self.stack.push(var.into());
+        let sym = Symbol::val(name.to_string(), self.stack.len() - 1);
+        self.sym_maps.top_scope().push_sym(sym);
+    }
+
+    pub fn push_native_fn(
+        &mut self,
+        name: &str,
+        f: fn(&mut EvalRT, Vec<Variable>) -> Variable
+    ) {
         let f_var = Variable::Function(Gc::new(Function::NativeFn(f)));
         self.stack.push(f_var);
         let fn_sym = Symbol::val(name.to_string(), self.stack.len() - 1);
