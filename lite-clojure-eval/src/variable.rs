@@ -37,6 +37,8 @@ pub enum Variable {
     Map(GcRefCell<HashMap<Variable,Variable>>),
     Var(String),
     Char(char),
+    
+    UserData(#[unsafe_ignore_trace] *mut u8),
     Nil,
 }
 
@@ -185,7 +187,8 @@ impl Variable {
                     }
                 };
                 format!("[{}]",lst_string)
-            }
+            },
+            Variable::UserData(_) =>  String::from("userdata"),
         }
     }
 
