@@ -7,9 +7,9 @@ use crate::variable::ClosureData;
 use crate::variable::Function;
 use crate::variable::GcRefCell;
 use crate::variable::Symbol;
-use std::collections::BTreeMap;
 use std::collections::HashMap;
 use std::collections::HashSet;
+use std::f32::consts::E;
 use std::rc::Rc;
 use std::usize;
 use gc::Gc;
@@ -88,8 +88,13 @@ impl EvalRT {
     }
 
     pub fn eval_string(&mut self,file_name:String,code_string:&str) -> Option<Variable> {
-        let ast_module = parse_ast(file_name, code_string).unwrap();
-        self.eval_ast_module(ast_module)
+        match parse_ast(file_name.clone(), code_string) {
+            Ok(ast_module) => self.eval_ast_module(ast_module),
+            Err(err) => {
+                log::error!("{} parse error:{:?}",&file_name,err);
+                None
+            }
+        }
     }
 
     pub fn eval_file(&mut self,path:&str) -> Option<Variable> {
@@ -101,10 +106,23 @@ impl EvalRT {
         let last_idx = ast_module.exprs.len() - 1;
         for idx in 0..ast_module.exprs.len() {
             let expr = &ast_module.exprs[idx];
-            self.eval_expr(expr,idx == last_idx).unwrap();
+            if let Err(err) = self.eval_expr(expr,idx == last_idx) {
+                log::error!("{} error:{:?}",&ast_module.file_name,err);
+            }
         }
         self.stack.last().map(|v| v.clone())
     }
+
+    pub fn find_symbol(&self,name:&str) -> Option<Variable> {
+        let symbol = self.sym_maps.find_local_or_top(&name.to_string())?;
+        if let Some(inner) = &symbol.bind_value {
+            let cell:&GcCell<Variable> = inner;
+            let var = cell.borrow().clone();
+            return Some(var);
+        }
+        Some(self.stack[symbol.index()].clone())
+    }
+   
 
     fn eval_expr(&mut self,expr:&Expr,is_push_stack:bool) -> Result<(),EvalError> {
         match expr {

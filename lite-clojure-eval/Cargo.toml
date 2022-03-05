@@ -12,3 +12,4 @@ eval_core = []
 serde_json = "1.0.64"
 lite-clojure-parser = {path = "../lite-clojure-parser"}
 gc = { version = "0.4.1", features = ["derive"] }
+log = "0.4.14"

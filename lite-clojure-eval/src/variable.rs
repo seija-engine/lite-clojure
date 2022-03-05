@@ -248,6 +248,13 @@ impl Variable {
             _ => None
         }
     }
+
+    pub fn cast_userdata(&self) -> Option<*mut u8> {
+        match self {
+            Variable::UserData(s) => Some(*s),
+            _ => None
+        }
+    }
 }
 
 
