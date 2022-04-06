@@ -255,6 +255,13 @@ impl Variable {
             _ => None
         }
     }
+
+    pub fn cast_function(&self) -> Option<Gc<Function>> {
+        match self {
+            Variable::Function(f) => Some(f.clone()),
+            _ => None
+        }
+    }
 }
 
 

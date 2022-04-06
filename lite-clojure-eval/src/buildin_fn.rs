@@ -26,7 +26,10 @@ fn is_number_all_int(args:&Vec<Variable>) -> bool  {
         match arg {
           Variable::Float(_) => { return false },
           Variable::Int(_) => (),
-          _ => panic!("err number type")
+          err_var => {
+              log::error!("err number type {:?}",err_var); 
+              return  false; 
+          }
         } 
     }
     return true;
@@ -36,14 +39,14 @@ fn number_op(args:&Vec<Variable>,fint:fn(i64,i64) -> i64,ffloat:fn(f64,f64) -> f
     let is_int = is_number_all_int( args);
     let mut iter = args.iter();
     if is_int {
-        let mut cur:i64 = iter.next().unwrap().cast_int().unwrap();
+        let mut cur:i64 = iter.next().unwrap().cast_int().unwrap_or(0i64);
         while let Some(v) = iter.next() {
             let vnum = v.cast_int().unwrap();
             cur = fint(cur,vnum);
         }
         return Variable::Int(cur);
     } else {
-        let mut cur:f64 = iter.next().unwrap().cast_float().unwrap();
+        let mut cur:f64 = iter.next().unwrap().cast_float().unwrap_or(0f64);
         while let Some(v) = iter.next() {
             let vnum = v.cast_float().unwrap();
             cur = ffloat(cur,vnum);

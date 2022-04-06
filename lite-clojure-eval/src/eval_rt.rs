@@ -113,6 +113,19 @@ impl EvalRT {
         self.stack.last().map(|v| v.clone())
     }
 
+    pub fn invoke_func(&mut self,fn_name:&str,args:Vec<Variable>) -> Result<Variable,EvalError> {
+        let fn_var = self.find_symbol(fn_name).ok_or(EvalError::NotFoundSymbol(fn_name.to_string()))?;
+        let f = fn_var.cast_function().ok_or(EvalError::TypeCastError)?;
+        let start_index = self.stack.len();
+        self.stack.push(fn_var);
+        for arg in args.iter() {
+            self.stack.push(arg.clone());
+        }
+        
+        self.run_function(&f, start_index, true, args, start_index)?;
+        Ok(self.stack.pop().unwrap())
+    }
+
     pub fn find_symbol(&self,name:&str) -> Option<Variable> {
         let symbol = self.sym_maps.find_local_or_top(&name.to_string())?;
         if let Some(inner) = &symbol.bind_value {
@@ -448,10 +461,21 @@ impl EvalRT {
             let var = self.stack[cur_idx + i].clone();
             args.push(var);
         }
+        self.run_function(&func, start_index, is_push_stack, args,fn_index)
+    }
 
-        
+    fn eval_closure(&mut self,closure_data:&ClosureData) -> Result<(),EvalError> {
+        let mut idx = 0;
+        let form_len = closure_data.body.len() - 1;
+        for form_expr in &closure_data.body {
+           self.eval_expr(&form_expr,form_len == idx )?;
+           idx += 1;
+        }
+        Ok(())
+    }
+    
 
-        let func_ref:&Function = &func;
+    fn run_function(&mut self,func_ref:&Function,start_index:usize,is_push_stack:bool,args:Vec<Variable>,fn_index:usize) -> Result<(), EvalError> {
         match func_ref {
             Function::NativeFn(nf) => {
                 self.enter_function(start_index);
@@ -493,22 +517,9 @@ impl EvalRT {
                 }
             }
         };
-      
         self.exit_function(is_push_stack);
         Ok(())
     }
-
-    fn eval_closure(&mut self,closure_data:&ClosureData) -> Result<(),EvalError> {
-        let mut idx = 0;
-        let form_len = closure_data.body.len() - 1;
-        for form_expr in &closure_data.body {
-           self.eval_expr(&form_expr,form_len == idx )?;
-           idx += 1;
-        }
-        Ok(())
-    }
-
-    
 
     fn enter_function(&mut self,start_index:usize) {
         let new_callstack = Callstack {index: start_index,need_loop:false,is_recur:true,is_let:false};
