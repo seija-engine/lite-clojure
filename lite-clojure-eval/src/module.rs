@@ -3,7 +3,7 @@ use crate::{exec_context::ExecContext, buildin_fn, variable::Symbol, Variable};
 use lite_clojure_parser::value::{Symbol as ASTSymbol};
 #[derive(Default)]
 pub struct EvalModules {
-    pub search_path:PathBuf,
+    pub search_path:Vec<PathBuf>,
     modules:HashMap<String,FileModule>,
     pub(crate) prelude: ExecContext
 }
@@ -51,12 +51,19 @@ impl EvalModules {
         }
         let mut mod_path = mod_name.replace('.', "/");
         mod_path.push_str(".clj");
-        let file_path =  self.search_path.join(mod_path);
-        if !file_path.exists() {
-            log::error!("not found {} on {:?}",mod_name,file_path);
+        let mut file_path = None;
+        for path in self.search_path.iter() {
+            let cur_path =  path.join(&mod_path);
+            if cur_path.exists() {
+                file_path = Some(cur_path);
+                continue;
+            }
+        }
+        if file_path.is_none() {
+            log::error!("not found {}",mod_name);
             return;
         }
-        match std::fs::read_to_string(file_path) {
+        match std::fs::read_to_string(file_path.unwrap()) {
             Ok(code_string) => {
                let file_mod = FileModule::create(mod_name,code_string.as_str(), self);
                self.modules.insert(mod_name.to_string(), file_mod);

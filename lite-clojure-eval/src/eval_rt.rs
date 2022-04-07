@@ -31,8 +31,8 @@ impl EvalRT {
         self.modules.init();
     }
 
-    pub fn set_search_path<P:Into<PathBuf>>(&mut self,path:P) {
-        self.modules.search_path = path.into();
+    pub fn add_search_path<P:Into<PathBuf>>(&mut self,path:P) {
+        self.modules.search_path.push(path.into());
     }
 
     pub fn invoke_func(&mut self,fn_name:&str,args:Vec<Variable>) -> Result<Variable,EvalError> {

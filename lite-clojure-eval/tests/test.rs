@@ -30,7 +30,7 @@ fn test_invoke() {
 fn test_require() {
     env_logger::try_init().unwrap();
     let mut rt = EvalRT::new();
-    rt.set_search_path("tests/");
+    rt.add_search_path("tests/");
     rt.init();
     rt.eval_file("tests/main.clj");
    
