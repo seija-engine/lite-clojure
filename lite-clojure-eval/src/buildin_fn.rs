@@ -195,7 +195,7 @@ pub fn require(scope:&mut ExecScope,args:Vec<Variable>) -> Variable {
        return Variable::Nil; 
    }
    if let Some(mod_name) = args[0].cast_string() {
-       scope.modules.require(mod_name.borrow().as_str());
+       scope.modules.require_mod(mod_name.borrow().as_str());
    } else {
        log::error!("require error: arg is not string");
    }

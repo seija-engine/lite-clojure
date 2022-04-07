@@ -115,7 +115,7 @@ impl ExecContext {
         Some(self.stack[symbol.index()].clone())
     }
 
-    pub fn find_symbol(&self,qual:Option<&str>,name:&str,modules:&mut EvalModules) -> Option<Variable> {
+    pub fn find_symbol(&self,qual:Option<&str>,name:&str,modules:&EvalModules) -> Option<Variable> {
         if qual.is_some() {
           return modules.find_symbol(qual,name);
         } 

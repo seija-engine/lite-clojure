@@ -14,7 +14,7 @@ struct Callstack {
 
 
 pub struct EvalRT {
-   global_ctx:ExecContext,
+   main_ctx:ExecContext,
    modules:EvalModules
 }
 
@@ -22,7 +22,7 @@ impl EvalRT {
 
     pub fn new() -> EvalRT {
         EvalRT { 
-            global_ctx:ExecContext::new(),
+            main_ctx:ExecContext::new(),
             modules:EvalModules::default()
         }
     }
@@ -36,12 +36,12 @@ impl EvalRT {
     }
 
     pub fn invoke_func(&mut self,fn_name:&str,args:Vec<Variable>) -> Result<Variable,EvalError> {
-       self.global_ctx.invoke_func(fn_name, args, &mut self.modules)
+       self.main_ctx.invoke_func(fn_name, args, &mut self.modules)
     }
 
  
     pub fn eval_string(&mut self,file_name:String,code_string:&str) -> Option<Variable> {
-       self.global_ctx.eval_string(file_name, code_string, &mut self.modules)
+       self.main_ctx.eval_string(file_name, code_string, &mut self.modules)
     }
 
     pub fn eval_file(&mut self,path:&str) -> Option<Variable> {
@@ -49,7 +49,15 @@ impl EvalRT {
         self.eval_string(String::from(path), &code)
     }
 
-    pub fn global(&mut self) -> &mut ExecContext {
-        &mut self.global_ctx
+    pub fn main_context(&mut self) -> &mut ExecContext {
+        &mut self.main_ctx
+    }
+
+    pub fn global_context(&mut self) -> &mut ExecContext {
+        &mut self.modules.prelude
+    }
+
+    pub fn add_module(&mut self,mod_name:&str,code_string:&str) {
+        self.modules.require_mod_str(mod_name,code_string)
     }
 }

@@ -7,7 +7,8 @@ mod value;
 mod module;
 mod exec_context;
 
-pub use variable::GcRefCell;
-pub use variable::Variable;
+pub use variable::{Variable,GcRefCell,ExecScope};
+
 pub use eval_rt::EvalRT;
 pub use error::EvalError;
+

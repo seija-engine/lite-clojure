@@ -5,7 +5,7 @@ use lite_clojure_parser::value::{Symbol as ASTSymbol};
 pub struct EvalModules {
     pub search_path:PathBuf,
     modules:HashMap<String,FileModule>,
-    prelude: ExecContext
+    pub(crate) prelude: ExecContext
 }
 
 impl EvalModules {
@@ -45,7 +45,10 @@ impl EvalModules {
        }
     }
 
-    pub fn require(&mut self,mod_name:&str) {
+    pub fn require_mod(&mut self,mod_name:&str) {
+        if self.modules.contains_key(mod_name) {
+            return;
+        }
         let mut mod_path = mod_name.replace('.', "/");
         mod_path.push_str(".clj");
         let file_path =  self.search_path.join(mod_path);
@@ -62,6 +65,14 @@ impl EvalModules {
                 log::error!("load module:{} error:{:?}",mod_name,err);
             },
         }
+    }
+
+    pub fn require_mod_str(&mut self,mod_name:&str,code_string:&str) {
+        if self.modules.contains_key(mod_name) {
+            return;
+        }
+        let file_mod = FileModule::create(mod_name,code_string, self);
+        self.modules.insert(mod_name.to_string(), file_mod);
     }
 }
 
