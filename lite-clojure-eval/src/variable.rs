@@ -2,7 +2,7 @@ use std::{borrow::Borrow, collections::{HashMap}, fmt::{Debug, Formatter}, iter:
 use gc::{Gc,GcCell,Finalize,Trace,GcCellRef,GcCellRefMut };
 use lite_clojure_parser::expr::Expr;
 
-use crate::eval_rt::{EvalRT};
+use crate::{eval_rt::{EvalRT}, exec_context::ExecContext, module::EvalModules};
 
 #[derive(Debug,Clone,Finalize,Trace)]
 pub struct  GcRefCell<T:Trace + Finalize + 'static>(Gc<GcCell<T>>);
@@ -291,10 +291,14 @@ impl Symbol {
 }
 
 
+pub struct ExecScope<'a> {
+    pub context:&'a mut ExecContext,
+    pub modules:&'a mut EvalModules
+}
 
 #[derive(Finalize,Trace)]
 pub enum Function {
-    NativeFn(#[unsafe_ignore_trace] fn(&mut EvalRT,args:Vec<Variable>) -> Variable),
+    NativeFn(#[unsafe_ignore_trace] fn(&mut ExecScope,args:Vec<Variable>) -> Variable),
     ClosureFn(ClosureData)
 }
 

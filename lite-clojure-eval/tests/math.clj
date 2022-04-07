@@ -1,0 +1,1 @@
+(defn pow2 [n] (* n n))

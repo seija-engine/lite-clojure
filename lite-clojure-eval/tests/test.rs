@@ -1,6 +1,7 @@
 use lite_clojure_eval::{EvalRT, Variable};
 #[test]
 fn test_loop() {
+    env_logger::try_init().unwrap();
     let mut rt = EvalRT::new();
     rt.init();
     rt.eval_file("tests/loop.clj");  
@@ -14,6 +15,7 @@ fn test_map() {
         println!("{:?}",ret);
     }
 }
+
 #[test]
 fn test_invoke() {
     
@@ -22,4 +24,14 @@ fn test_invoke() {
     rt.eval_file("tests/invoke.clj");
     let ret = rt.invoke_func("foo", vec![Variable::Int(2)]).ok().and_then(|v| v.cast_int());
     assert!(ret == Some(114516));
+}
+
+#[test]
+fn test_require() {
+    env_logger::try_init().unwrap();
+    let mut rt = EvalRT::new();
+    rt.set_search_path("tests/");
+    rt.init();
+    rt.eval_file("tests/main.clj");
+   
 }

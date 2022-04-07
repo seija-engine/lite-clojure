@@ -1,8 +1,8 @@
 use std::collections::HashMap;
 
-use crate::{Variable, eval_rt::{EvalRT}};
+use crate::{Variable,  variable::ExecScope};
  
-pub fn print(_:&mut EvalRT,args:Vec<Variable>,is_line:bool) -> Variable {
+pub fn print(_:&mut ExecScope,args:Vec<Variable>,is_line:bool) -> Variable {
     let mut out_string = String::default();
     let mut idx = 0;
     let args_len = args.len();
@@ -56,35 +56,35 @@ fn number_op(args:&Vec<Variable>,fint:fn(i64,i64) -> i64,ffloat:fn(f64,f64) -> f
    
 }
 
-pub fn num_add(_:&mut EvalRT,args:Vec<Variable>) -> Variable {
+pub fn num_add(_:&mut ExecScope,args:Vec<Variable>) -> Variable {
     if args.len() == 0 {
         return Variable::Int(0);
     }
     return number_op( &args, |a,b| a + b, |a,b| a + b);
 }
 
-pub fn num_sub(_:&mut EvalRT,args:Vec<Variable>) -> Variable {
+pub fn num_sub(_:&mut ExecScope,args:Vec<Variable>) -> Variable {
     if args.len() == 0 {
        panic!("sum number zero args");
     }
     return number_op( &args, |a,b| a - b, |a,b| a - b);
 }
 
-pub fn num_mul(_:&mut EvalRT,args:Vec<Variable>) -> Variable {
+pub fn num_mul(_:&mut ExecScope,args:Vec<Variable>) -> Variable {
     if args.len() == 0 {
         return Variable::Int(1);
     }
     return number_op( &args, |a,b| a * b, |a,b| a * b);
 }
 
-pub fn num_div(_:&mut EvalRT,args:Vec<Variable>) -> Variable {
+pub fn num_div(_:&mut ExecScope,args:Vec<Variable>) -> Variable {
     if args.len() == 0 {
         panic!("num_div number zero args");
     }
     return number_op( &args, |a,b| a / b, |a,b| a / b);
 }
 
-pub fn num_lt(_:&mut EvalRT,args:Vec<Variable>) -> Variable {
+pub fn num_lt(_:&mut ExecScope,args:Vec<Variable>) -> Variable {
     if args.len() < 2 {
         panic!("num_lt error");
     }
@@ -93,7 +93,7 @@ pub fn num_lt(_:&mut EvalRT,args:Vec<Variable>) -> Variable {
     Variable::Bool(a < b)
 }
 
-pub fn num_gt(_:&mut EvalRT,args:Vec<Variable>) -> Variable {
+pub fn num_gt(_:&mut ExecScope,args:Vec<Variable>) -> Variable {
     if args.len() < 2 {
         panic!("num_gt error");
     }
@@ -102,7 +102,7 @@ pub fn num_gt(_:&mut EvalRT,args:Vec<Variable>) -> Variable {
     Variable::Bool(a > b)
 }
 
-pub fn num_le(_:&mut EvalRT,args:Vec<Variable>) -> Variable {
+pub fn num_le(_:&mut ExecScope,args:Vec<Variable>) -> Variable {
     if args.len() < 2 {
         panic!("num_le error");
     }
@@ -111,7 +111,7 @@ pub fn num_le(_:&mut EvalRT,args:Vec<Variable>) -> Variable {
     Variable::Bool(a <= b)
 }
 
-pub fn num_ge(_:&mut EvalRT,args:Vec<Variable>) -> Variable {
+pub fn num_ge(_:&mut ExecScope,args:Vec<Variable>) -> Variable {
     if args.len() < 2 {
         panic!("num_ge error");
     }
@@ -120,7 +120,7 @@ pub fn num_ge(_:&mut EvalRT,args:Vec<Variable>) -> Variable {
     Variable::Bool(a >= b)
 }
 
-pub fn nth(_:&mut EvalRT,args:Vec<Variable>) -> Variable {
+pub fn nth(_:&mut ExecScope,args:Vec<Variable>) -> Variable {
     if args.len() < 2 {
         panic!("nth error");
     }
@@ -138,22 +138,22 @@ pub fn nth(_:&mut EvalRT,args:Vec<Variable>) -> Variable {
     panic!("index out range");
 }
 
-pub fn var_set(rt:&mut EvalRT,mut args: Vec<Variable>) -> Variable {
+pub fn var_set(rt:&mut ExecScope,mut args: Vec<Variable>) -> Variable {
    if args.len() < 2 {
        panic!("var_set error");
    }
    let var_name = args.remove(0).cast_var().unwrap();
    let set_val = args.remove(0);
-   let len = rt.sym_maps.list.len();
-   let scope = &rt.sym_maps.list[len - 2];
+   let len = rt.context.sym_maps.list.len();
+   let scope = &rt.context.sym_maps.list[len - 2];
    
-   let find_sym = scope.find(&var_name).or(rt.sym_maps.top_scope().find(&var_name));
+   let find_sym = scope.find(&var_name).or(rt.context.sym_maps.top_scope().find(&var_name));
  
    if let Some(sym ) = find_sym {
        if let Some(bind_value) = &sym.bind_value {
            *bind_value.borrow_mut() = set_val;
        } else {
-           rt.stack[sym.index()] = set_val;
+           rt.context.stack[sym.index()] = set_val;
        }
    } else {
        eprintln!("not found var {}",&var_name);
@@ -161,7 +161,7 @@ pub fn var_set(rt:&mut EvalRT,mut args: Vec<Variable>) -> Variable {
    Variable::Nil
 }
 
-pub fn get(_:&mut EvalRT,args:Vec<Variable>) -> Variable {
+pub fn get(_:&mut ExecScope,args:Vec<Variable>) -> Variable {
     let default = if args.len() > 2 { Some(args[2].clone()) } else {None };
     match &args[0] {
         Variable::Array(arr) => {
@@ -185,6 +185,19 @@ pub fn get(_:&mut EvalRT,args:Vec<Variable>) -> Variable {
     } 
 }
 
-pub fn eq(_:&mut EvalRT,args:Vec<Variable>) -> Variable {
+pub fn eq(_:&mut ExecScope,args:Vec<Variable>) -> Variable {
     Variable::Bool(args[0] == args[1])
+}
+
+pub fn require(scope:&mut ExecScope,args:Vec<Variable>) -> Variable {
+   if args.len()  == 0 {
+       log::error!("require error: zero args");
+       return Variable::Nil; 
+   }
+   if let Some(mod_name) = args[0].cast_string() {
+       scope.modules.require(mod_name.borrow().as_str());
+   } else {
+       log::error!("require error: arg is not string");
+   }
+   Variable::Nil
 }
