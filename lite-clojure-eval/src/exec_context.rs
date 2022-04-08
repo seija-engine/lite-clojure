@@ -447,6 +447,10 @@ impl ExecContext {
     }
 
     fn eval_closure(&mut self,closure_data:&ClosureData,modules:&mut EvalModules) -> Result<(),EvalError> {
+        if closure_data.body.len() == 0 {
+            self.stack.push(Variable::Nil);
+            return Ok(()) 
+        }
         let mut idx = 0;
         let form_len = closure_data.body.len() - 1;
         for form_expr in &closure_data.body {

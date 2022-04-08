@@ -1,6 +1,5 @@
 use std::{collections::HashMap, path::PathBuf};
-use crate::{exec_context::ExecContext, buildin_fn, variable::Symbol, Variable};
-use lite_clojure_parser::value::{Symbol as ASTSymbol};
+use crate::{exec_context::ExecContext, buildin_fn, Variable};
 #[derive(Default)]
 pub struct EvalModules {
     pub search_path:Vec<PathBuf>,
@@ -29,7 +28,8 @@ impl EvalModules {
         self.prelude.push_native_fn("nth", buildin_fn::nth);
         self.prelude.push_native_fn("get", buildin_fn::get);
         self.prelude.push_native_fn("=", buildin_fn::eq);
-        
+        self.prelude.push_native_fn("nil?", buildin_fn::is_nil);
+        self.prelude.push_native_fn("concat", buildin_fn::concat);
     }
 
     pub fn find_symbol(&self,qual:Option<&str>,name:&str) -> Option<Variable> {

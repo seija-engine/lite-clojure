@@ -1,6 +1,6 @@
 use std::collections::HashMap;
 
-use crate::{Variable,  variable::ExecScope};
+use crate::{Variable,  variable::ExecScope, GcRefCell};
  
 pub fn print(_:&mut ExecScope,args:Vec<Variable>,is_line:bool) -> Variable {
     let mut out_string = String::default();
@@ -200,4 +200,37 @@ pub fn require(scope:&mut ExecScope,args:Vec<Variable>) -> Variable {
        log::error!("require error: arg is not string");
    }
    Variable::Nil
+}
+
+
+pub fn is_nil(_:&mut ExecScope,args:Vec<Variable>) -> Variable {
+    if args.len() == 0 { return Variable::Bool(true); }
+    match args[0] {
+        Variable::Nil => Variable::Bool(true),
+        _ => Variable::Bool(false)
+    }
+}
+
+pub fn concat(_:&mut ExecScope,args:Vec<Variable>) -> Variable {
+    if args.len() == 0 { return Variable::Array(GcRefCell::new(vec![])); }
+    match args[0] {
+        Variable::Map(_) => {
+            todo!()
+        },
+        Variable::Array(_) => {
+            let mut new_arr:Vec<Variable> = vec![];
+            for arg in args.iter() {
+                match arg {
+                    Variable::Array(arr) => {
+                        for item in arr.borrow().iter() {
+                            new_arr.push(item.clone());
+                        }
+                    },
+                    _ => {}
+                }
+            }
+            return Variable::Array(GcRefCell::new(new_arr));
+        },
+        _ => Variable::Nil
+    }
 }
