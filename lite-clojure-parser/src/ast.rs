@@ -200,7 +200,10 @@ impl TranslateToAST {
              let sym_lst:Vec<Symbol> = flst.drain(..).map(|f| f.case_sym().unwrap()).collect();
              let mut form_lst:Vec<Expr> = vec![];
              for item in lst {
-                 form_lst.push(self.analyze(item).unwrap()?);
+                 if let Some(az_expr) = self.analyze(item) {
+                    form_lst.push(az_expr?);
+                 }
+                
              }
              Ok(Expr::Fn(sym_lst,form_lst))
         } else {
