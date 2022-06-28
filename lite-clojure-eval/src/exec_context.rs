@@ -55,6 +55,21 @@ impl ExecContext {
         self.sym_maps.top_scope().push_sym(sym);
     }
 
+    pub fn set_var(&mut self,name:&str,var:impl Into<Variable>) {
+        let symbol = self.sym_maps.find_local_or_top(&name.to_string());
+        if let Some(symbol) = symbol {
+            if let Some(inner) = &symbol.bind_value {
+                let cell:&GcCell<Variable> = inner;
+                let mut var_mut = cell.borrow_mut();
+                *var_mut = var.into();
+            } else {
+                self.stack[symbol.index()] = var.into();
+            }
+        } else {
+            self.push_var(name, var);
+        }
+    }
+
     pub fn push_native_fn(
         &mut self,
         name: &str,
