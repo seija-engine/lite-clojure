@@ -24,7 +24,7 @@ pub enum ASTError {
     ErrSeq,
     ArgErrorDef,
     BadBindingForm,
-    ErrLet,
+    ErrLet(usize),
     ErrIf,
 }
 

@@ -54,6 +54,13 @@ impl CExpr {
         }
     }
 
+    pub fn is_comment(&self) -> bool {
+        match  self {
+            CExpr::Comment(_) => true,
+            _ => false
+        }
+    }
+
     pub fn is_vec(&self) -> bool {
         match self {
             CExpr::Vector(_) => true,
@@ -83,6 +90,18 @@ impl CExpr {
             CExpr::Dref(b) => (*b).take_list(),
             CExpr::UnQuote(b) => (*b).take_list(),
             CExpr::UnQuoteS(b) => (*b).take_list(),
+            _ => None
+        }
+    }
+
+    pub fn take_list_no_white(self) -> Option<Vec<CExpr>>  {
+        match self {
+            CExpr::Vector(mut lst) => Some(lst.drain(..).filter(|e| !e.is_comment()).collect() ),
+            CExpr::List(mut vec) => Some(vec.drain(..).filter(|e| !e.is_comment()).collect() ),
+            CExpr::Quote(b) => (*b).take_list_no_white(),
+            CExpr::Dref(b) => (*b).take_list_no_white(),
+            CExpr::UnQuote(b) => (*b).take_list_no_white(),
+            CExpr::UnQuoteS(b) => (*b).take_list_no_white(),
             _ => None
         }
     }

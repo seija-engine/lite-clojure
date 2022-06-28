@@ -140,7 +140,7 @@ impl TranslateToAST {
                     "case*" => return self.parse_case_expr(),
                     "recur" => return self.parse_recur_expr(cexpr),
                     "do" => {
-                        let mut lst = cexpr.take_list().unwrap();
+                        let mut lst = cexpr.take_list_no_white().unwrap();
                         lst.remove(0);
                         return self.parse_do_expr_(lst)
                     },
@@ -152,7 +152,7 @@ impl TranslateToAST {
     }
 
     fn parse_recur_expr(&mut self,cexpr:CExpr)  -> Result<Expr,ASTError> {
-        let mut lst = cexpr.take_list().unwrap();
+        let mut lst = cexpr.take_list_no_white().unwrap();
         lst.remove(0);
         let mut arg_list :Vec<Expr> = vec![];
         for arg in lst {
@@ -191,7 +191,7 @@ impl TranslateToAST {
 
     fn parse_fn_expr(&mut self,cexpr:CExpr) -> Result<Expr,ASTError> {
         //(fn [a b c] a) or (fn ([a] a)  ([a b] b))
-        let mut lst = cexpr.take_list().unwrap();
+        let mut lst = cexpr.take_list_no_white().unwrap();
         lst.remove(0); //rm fn
         let is_first_vec = lst.first().unwrap().is_vec();
         if is_first_vec {
@@ -200,7 +200,10 @@ impl TranslateToAST {
              let sym_lst:Vec<Symbol> = flst.drain(..).map(|f| f.case_sym().unwrap()).collect();
              let mut form_lst:Vec<Expr> = vec![];
              for item in lst {
-                 form_lst.push(self.analyze(item).unwrap()?);
+                 if let Some(az_expr) = self.analyze(item) {
+                    form_lst.push(az_expr?);
+                 }
+                
              }
              Ok(Expr::Fn(sym_lst,form_lst))
         } else {
@@ -210,7 +213,7 @@ impl TranslateToAST {
 
     fn parse_if_expr(&mut self,cexpr:CExpr) -> Result<Expr,ASTError> {
         // (if test then) or (if test then else)
-        let mut lst = cexpr.take_list().unwrap();
+        let mut lst = cexpr.take_list_no_white().unwrap();
         if lst.len() > 4 || lst.len() < 3 {
             return Err(ASTError::ErrIf);
         }
@@ -225,7 +228,7 @@ impl TranslateToAST {
 
     fn parse_def_expr(&mut self,cexpr:CExpr) -> Result<Expr,ASTError> {
         // (def x) or (def x initexpr) or (def x "docstring" initexpr)
-        let mut lst = cexpr.take_list().unwrap();
+        let mut lst = cexpr.take_list_no_white().unwrap();
         let mut doc_string:Option<String> = None;
         if lst.len() == 4 && lst[2].is_string() {
             doc_string = Some(lst.remove(2).cast_string().unwrap());
@@ -246,17 +249,17 @@ impl TranslateToAST {
     fn parse_let_expr(&mut self,cexpr:CExpr,is_loop:bool) -> Result<Expr,ASTError> {
         //(let  [var1 val1 var2 val2 ... ] body ... )
         //(loop [var1 val1 var2 val2 ... ] body ... )
-        let mut lst = cexpr.take_list().unwrap();
+        let mut lst = cexpr.take_list_no_white().unwrap();
         if lst.len() < 2 {
-            return Err(ASTError::ErrLet);
+            return Err(ASTError::ErrLet(lst.len()));
         }
         lst.remove(0);
         if !lst[0].is_vec() {
             return Err(ASTError::BadBindingForm);
         }
-        let mut bindings = lst.remove(0).take_list().unwrap();
+        let mut bindings = lst.remove(0).take_list_no_white().unwrap();
         if (bindings.len() % 2) != 0 {
-            return Err(ASTError::ErrLet);
+            return Err(ASTError::ErrLet(bindings.len()));
         }
 
         let mut bind_vecs:Vec<Expr> = vec![];
@@ -285,7 +288,7 @@ impl TranslateToAST {
 
     fn parse_invoke(&mut self,cexpr:CExpr) -> Result<Expr,ASTError> {
         let mut exprs:Vec<Expr> = vec![];
-        for cexpr in cexpr.take_list().unwrap() {
+        for cexpr in cexpr.take_list_no_white().unwrap() {
             if let Some(e) = self.analyze(cexpr) {
                 exprs.push(e?);
             }

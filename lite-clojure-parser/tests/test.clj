@@ -1,3 +1,12 @@
+(let [
+             ;swapchain     (node SWAP_CHAIN)
+             gbuffer          (node GBUFFER)
+             depth-texture (node WINDOW_TEXTURE)
+]
+
+  123
+)
+
 #_(Entity
    Sprite
    Draw
@@ -50,3 +59,4 @@
 (link-> camera-node     main-pass-node)
 (link-> sprite-res-node main-pass-node)
 (link-> main-pass-node  window-swap)
+
