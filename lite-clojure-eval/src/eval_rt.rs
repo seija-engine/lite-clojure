@@ -39,7 +39,10 @@ impl EvalRT {
        self.main_ctx.invoke_func(fn_name, args, &mut self.modules)
     }
 
- 
+    pub fn invoke_func2(&mut self,fn_var:&Variable,args:Vec<Variable>) -> Result<Variable,EvalError> {
+        self.main_ctx.invoke_func2(fn_var, args, &mut self.modules)
+    }
+    
     pub fn eval_string(&mut self,file_name:String,code_string:&str) -> Option<Variable> {
        self.main_ctx.eval_string(file_name, code_string, &mut self.modules)
     }

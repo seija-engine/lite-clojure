@@ -120,6 +120,19 @@ impl ExecContext {
         Ok(self.stack.pop().unwrap())
     }
 
+    pub fn invoke_func2(&mut self,fn_var:&Variable,args:Vec<Variable>,modules:&mut EvalModules) -> Result<Variable,EvalError> {
+        if let Variable::Function(f) = fn_var {
+            let start_index = self.stack.len();
+            self.stack.push(fn_var.clone());
+            for arg in args.iter() {
+                self.stack.push(arg.clone());
+            }
+            self.run_function(&f, start_index, true, args, start_index,modules)?;
+            return Ok(self.stack.pop().unwrap())
+        }
+        Err(EvalError::TypeCastError)
+    }
+
     pub fn find_local_symbol(&self,name:&str) -> Option<Variable> {
         let symbol = self.sym_maps.find_local_or_top(&name.to_string())?;
         if let Some(inner) = &symbol.bind_value {
