@@ -30,6 +30,11 @@ impl EvalModules {
         self.prelude.push_native_fn("=", buildin_fn::eq);
         self.prelude.push_native_fn("nil?", buildin_fn::is_nil);
         self.prelude.push_native_fn("concat", buildin_fn::concat);
+        //mut list
+        self.prelude.push_native_fn("conj!", buildin_fn::conj_mut);
+        //mut map
+        self.prelude.push_native_fn("assoc!", buildin_fn::assoc_mut);
+        self.prelude.push_native_fn("dissoc!", buildin_fn::dissoc_mut);
     }
 
     pub fn find_symbol(&self,qual:Option<&str>,name:&str) -> Option<Variable> {

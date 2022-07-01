@@ -1,4 +1,6 @@
-use std::collections::HashMap;
+use std::{collections::HashMap};
+
+use gc::Trace;
 
 use crate::{Variable,  variable::ExecScope, GcRefCell};
  
@@ -233,4 +235,46 @@ pub fn concat(_:&mut ExecScope,args:Vec<Variable>) -> Variable {
         },
         _ => Variable::Nil
     }
+}
+
+pub fn dissoc_mut(_:&mut ExecScope,mut args:Vec<Variable>) -> Variable {
+    if args.len() == 0 { 
+        log::error!("dissoc! error:zero args");
+        return Variable::Nil 
+    }
+    let map_var = args.remove(0);
+    if let Some(map) = map_var.cast_map() {
+        for arg in args.iter() {
+            map.borrow_mut().remove(arg);
+        }
+    }
+    map_var
+}
+
+pub fn assoc_mut(_:&mut ExecScope,mut args:Vec<Variable>) -> Variable {
+    if args.len() < 3 || ((args.len() - 1) % 2) != 0 { 
+        log::error!("assoc! error:error args count:{}",args.len());
+        return Variable::Nil 
+    }
+    let map_var = args.remove(0);
+    if let Some(map) = map_var.cast_map() {
+        for (index,key) in args.iter().step_by(2).enumerate() {
+            let value = args[index * 2 + 1].clone();
+            map.borrow_mut().insert(key.clone(), value);
+        }
+    }
+    map_var
+}
+
+pub fn conj_mut(_:&mut ExecScope,mut args:Vec<Variable>) -> Variable {
+    if args.len() == 0 { return Variable::Array(GcRefCell::new(vec![])); }
+    if args.len() == 1 { return args.remove(0); }
+    if let Some(list) = args.remove(0).cast_vec() {
+        for arg in args.iter() {
+            list.borrow_mut().push(arg.clone());
+        }
+    } else {
+        log::error!("conj! fst type error");
+    }
+    Variable::Nil
 }
