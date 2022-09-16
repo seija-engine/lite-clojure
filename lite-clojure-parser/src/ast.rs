@@ -60,8 +60,15 @@ impl TranslateToAST {
                 match lst.first() {
                     Some(CExpr::Symbol(sym)) => {
                         match sym.name.as_str() {
-                            "defn" => self.ex_defn(lst),   
-                            _=> { self.hand_macro_list(lst);  }
+                            "defn" => self.ex_defn(lst),
+                            "defrecord" => self.ex_defrecord(lst).unwrap(),
+                            s => {
+                                if s.chars().next() == Some('.') {
+                                    self.ex_object_call(lst);
+                                } else {
+                                    self.hand_macro_list(lst);  
+                                }
+                            }
                         }
                     }
                     _=> { self.hand_macro_list(lst);  }
@@ -72,6 +79,95 @@ impl TranslateToAST {
         
     }
 
+    fn ex_defrecord(&mut self,lst:&mut Vec<CExpr>) -> Result<(),CSTError> {
+         /*(defrecord RecordName []
+             (fname [this param] 
+            
+             )
+
+             (fname2 [this param]
+                
+            )
+
+            to
+
+            (def RecordName. (fn [a b] 
+                    {
+                        :a a 
+                        :b b
+                        "fname" (fn [this param]
+                    
+                        )
+
+                        "fname2" (fn [this param]
+                    
+                        )
+                    }
+                )
+            )
+        )*/
+        let mut new_lst:Vec<CExpr> = vec![];
+        let def_sym = Symbol::intern(None,String::from("def"));
+        new_lst.push(CExpr::Symbol(def_sym));
+        
+        lst.remove(0); //defrecord
+        let mut record_name = lst.remove(0); //RecordName
+        if let CExpr::Symbol(ref mut sym) = record_name {
+            sym.name.push('.');
+        }
+        new_lst.push(record_name);
+
+        let mut fn_list:Vec<CExpr> = vec![CExpr::Symbol(Symbol::intern(None,String::from("fn")))];
+
+        let mut record_fns:Vec<CExpr> = vec![];
+        let mut args = lst.remove(0).take_list().ok_or(CSTError::ExMacroDefrecord)?;
+        for arg in args.iter() {
+            if let CExpr::Symbol(ref sym) = arg {
+                record_fns.push(CExpr::String(sym.name.clone()));
+                record_fns.push(arg.clone());
+            }
+        }
+        fn_list.push(CExpr::Vector(args.clone()));
+        
+        
+
+       
+        for f in lst.drain(..) {
+            let mut expr_list = f.take_list().ok_or(CSTError::ExMacroDefrecord)?;
+            let fn_name = expr_list.remove(0).cast_symbol().map_err(|_|CSTError::ExMacroDefrecord)?;
+
+            let fn_sym = Symbol::intern(None,String::from("fn"));
+            expr_list.insert(0, CExpr::Symbol(fn_sym.clone()));
+
+            
+            record_fns.push(CExpr::String(fn_name.name) );
+            record_fns.push(CExpr::List(expr_list));
+        }
+        fn_list.push(CExpr::Map(record_fns));
+        new_lst.push(CExpr::List(fn_list));
+       
+        *lst = new_lst;
+        Ok(())
+       
+    }
+
+    fn ex_object_call(&self,lst:&mut Vec<CExpr>) -> Result<(),CSTError> {
+         /*
+        (.fname object 123)
+        to
+        ((object "fname") object 123)
+        */
+        let mut fn_name = lst.remove(0).cast_symbol().map_err(|_| CSTError::ExMacroObjectCall)?.name;
+        fn_name.remove(0);
+        let this = lst[0].clone();
+        let mut new_lst:Vec<CExpr> = vec![]; 
+        let fn_list = CExpr::List(vec![this, CExpr::String(fn_name)]);
+        new_lst.push(fn_list);
+        new_lst.append(lst);
+        *lst = new_lst;
+
+        Ok(())
+    }
 
     fn ex_defn(&mut self,lst:&mut Vec<CExpr>)  {
         //(defn fn_name [args] (seq1 ) (seq 2)) -> (def fn_name (fn [args] (seq1) (seq 2)))
@@ -89,7 +185,7 @@ impl TranslateToAST {
        
         new_lst.push(CExpr::List(lst.clone()));
        
-      
+       
         *lst = new_lst  
     }
 
@@ -207,7 +303,8 @@ impl TranslateToAST {
              }
              Ok(Expr::Fn(sym_lst,form_lst))
         } else {
-            todo!()
+            eprintln!("fn expr error:{:?}",&lst);
+            return Err(ASTError::ErrFn);
         }
     }
 

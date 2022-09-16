@@ -50,5 +50,14 @@ fn test_require() {
     rt.add_search_path("tests/");
     rt.init();
     rt.eval_file("tests/main.clj");
-   
+}
+
+
+#[test]
+fn test_record() {
+    env_logger::try_init().unwrap();
+    let mut rt = EvalRT::new();
+    rt.add_search_path("tests/");
+    rt.init();
+    rt.eval_file("tests/record.clj");
 }

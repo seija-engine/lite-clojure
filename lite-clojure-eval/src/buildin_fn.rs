@@ -1,6 +1,5 @@
 use std::{collections::HashMap};
 
-use gc::Trace;
 
 use crate::{Variable,  variable::ExecScope, GcRefCell};
  

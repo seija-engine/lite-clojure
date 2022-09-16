@@ -15,7 +15,9 @@ pub enum CSTError {
     ErrSymbol(String),
     ErrMetadata,
     ErrEof,
-    ErrQuoteVar
+    ErrQuoteVar,
+    ExMacroDefrecord,
+    ExMacroObjectCall
 }
 
 #[derive(Debug)]
@@ -26,6 +28,7 @@ pub enum ASTError {
     BadBindingForm,
     ErrLet(usize),
     ErrIf,
+    ErrFn
 }
 
 impl Display for ASTError {
