@@ -1,0 +1,7 @@
+[package]
+name = "lite-clojure-frp"
+version = "0.1.0"
+edition = "2021"
+
+[dependencies]
+lite-clojure-eval = {path = "../lite-clojure-eval"}

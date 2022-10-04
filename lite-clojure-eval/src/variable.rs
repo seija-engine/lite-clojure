@@ -1,8 +1,8 @@
-use std::{borrow::Borrow, collections::{HashMap}, fmt::{Debug, Formatter}, iter::Map, rc::Rc, usize};
+use std::{borrow::Borrow, collections::{HashMap}, fmt::{Debug, Formatter}, rc::Rc, usize};
 use gc::{Gc,GcCell,Finalize,Trace,GcCellRef,GcCellRefMut };
 use lite_clojure_parser::expr::Expr;
 
-use crate::{eval_rt::{EvalRT}, exec_context::ExecContext, module::EvalModules};
+use crate::{exec_context::ExecContext, module::EvalModules};
 
 #[derive(Debug,Clone,Finalize,Trace)]
 pub struct  GcRefCell<T:Trace + Finalize + 'static>(Gc<GcCell<T>>);

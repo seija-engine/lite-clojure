@@ -1,16 +1,5 @@
 use std::path::PathBuf;
-
-use lite_clojure_parser::ast::parse_ast;
-
-use crate::{Variable, exec_context::ExecContext, buildin_fn, EvalError, module::EvalModules};
-
-#[derive(Debug,Clone)]
-struct Callstack {
-    pub need_loop:bool,
-    is_recur:bool,
-    is_let:bool,
-    pub(crate) index: usize,
-}
+use crate::{Variable, exec_context::ExecContext,EvalError, module::EvalModules};
 
 
 pub struct EvalRT {

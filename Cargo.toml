@@ -2,4 +2,5 @@
 members = [
     "lite-clojure-eval",
     "lite-clojure-parser",
+    "lite-clojure-frp"
 ]

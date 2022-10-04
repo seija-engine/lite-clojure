@@ -101,6 +101,13 @@ dependencies = [
 ]
 
 [[package]]
+name = "lite-clojure-frp"
+version = "0.1.0"
+dependencies = [
+ "lite-clojure-eval",
+]
+
+[[package]]
 name = "lite-clojure-parser"
 version = "0.1.0"
 

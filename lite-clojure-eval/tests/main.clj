@@ -7,3 +7,6 @@
 (println (math/pow2 2))
 
 (string.tools/log-str "SSSSSSSSSSS")
+
+(def <$> 123)
+(println <$>)
