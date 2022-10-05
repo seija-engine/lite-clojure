@@ -5,3 +5,5 @@ edition = "2021"
 
 [dependencies]
 lite-clojure-eval = {path = "../lite-clojure-eval"}
+anyhow = "1.0.58"
+thiserror = "1.0.25"

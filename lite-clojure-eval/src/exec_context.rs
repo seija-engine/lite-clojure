@@ -14,6 +14,7 @@ use std::rc::Rc;
 use std::usize;
 use gc::Gc;
 use gc::GcCell;
+use anyhow::Result;
 use lite_clojure_parser::ast::parse_ast;
 use lite_clojure_parser::expr::Expr;
 use lite_clojure_parser::ast::ASTModule;

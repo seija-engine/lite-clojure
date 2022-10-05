@@ -47,7 +47,7 @@ impl FRPSystem {
             } else {
                 var.clone()
             };
-            println!("{:?}",&eval_var);
+            //println!("{:?}",&eval_var);
             for child_event_id in e.next_events.iter() {
                 self.fire(*child_event_id, &eval_var, vm)?;    
             }
@@ -69,4 +69,5 @@ fn testt() {
     vm.global_context().push_var("*FRPSYSTEM*", Variable::UserData(frp_ptr));
 
     vm.eval_file("tests/1.clj");
+    system.fire(e0, &Variable::Nil, &mut vm);
 }

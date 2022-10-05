@@ -1,3 +1,2 @@
 (def eClick ($> eRoot "+"))
-
-(println eClick)
+(def eLogClick (<$> eClick (fn [a] (println a)  a)))

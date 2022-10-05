@@ -315,3 +315,12 @@ impl Debug for Function {
         f.write_str("Function")
     }
 }
+
+impl<'a> ExecScope<'a> {
+    pub fn find_userdata<T>(&self,name:&str) -> Option<&mut T> {
+        let user_var = self.context.find_symbol(None, name, &self.modules)?;
+        let ptr = user_var.cast_userdata()?;
+        let value_ptr = unsafe { &mut *(ptr as *mut T) };
+        Some(value_ptr)
+    }
+}
