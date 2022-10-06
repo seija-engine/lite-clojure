@@ -7,3 +7,4 @@ edition = "2021"
 lite-clojure-eval = {path = "../lite-clojure-eval"}
 anyhow = "1.0.58"
 thiserror = "1.0.25"
+env_logger = "0.9.0"
