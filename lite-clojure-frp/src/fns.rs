@@ -34,7 +34,7 @@ fn hold_dynamic(s:&mut ExecScope,a:Vec<Variable>) -> Variable {
         let frp_system = get_frp_system(scope)?;
         let default_value = args.remove(0);
         let event_id = args.remove(0).cast_int().ok_or(anyhow!(FRPError::TypeCastError))?;
-        let dynamic_id = frp_system.create_dynamic(default_value, event_id as u32,None)
+        let dynamic_id = frp_system.new_dynamic(default_value, event_id as u32,None)
                                        .ok_or(anyhow!(FRPError::EventNotFound))?;
         Ok(Variable::Int(dynamic_id as i64))
     })
@@ -46,7 +46,7 @@ fn fold_dynamic(s:&mut ExecScope,a:Vec<Variable>) -> Variable {
         let default_value = args.remove(0);
         let event_id = args.remove(0).cast_int().ok_or(anyhow!(FRPError::TypeCastError))?;
         let fn_var = args.remove(0);
-        let dynamic_id = frp_system.create_dynamic(default_value, event_id as u32, Some(fn_var))
+        let dynamic_id = frp_system.new_dynamic(default_value, event_id as u32, Some(fn_var))
                                         .ok_or(anyhow!(FRPError::EventNotFound))?;
         Ok(Variable::Int(dynamic_id as i64)) 
     })

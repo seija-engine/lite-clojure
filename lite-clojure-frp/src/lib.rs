@@ -26,11 +26,22 @@ pub struct Dynamic {
 #[derive(Default)]
 pub struct FRPSystem {
     auto_id:u32,
+    never_event:EventID,
     events:HashMap<u32,Event>,
     dynamics:HashMap<u32,Dynamic>
 }
 
 impl FRPSystem {
+    pub fn new() -> Self {
+        let mut system = FRPSystem::default();
+        system.never_event = system.new_event(None);
+        system
+    }
+
+    pub fn never(&self) -> EventID {
+        self.never_event
+    }
+
     pub fn new_event(&mut self,var:Option<Variable>) -> EventID {
        let ev =  Event { id: self.auto_id,f:var, next_events:vec![],next_dynamics:vec![] };
         self.events.insert(self.auto_id, ev);
@@ -90,7 +101,7 @@ impl FRPSystem {
         Ok(())
     }
 
-    pub fn create_dynamic(&mut self,value:Variable,event:EventID,fold_fn:Option<Variable>) -> Option<DynamicID>  {
+    pub fn new_dynamic(&mut self,value:Variable,event:EventID,fold_fn:Option<Variable>) -> Option<DynamicID>  {
         let dynmaic = Dynamic { value,fold_fn,updated:None };
         let event_mut = self.events.get_mut(&event)?;
         event_mut.next_dynamics.push(self.auto_id);
