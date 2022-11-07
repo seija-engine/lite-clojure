@@ -18,7 +18,7 @@ pub type DynamicID = u32;
 
 pub struct Dynamic {
     pub value:Variable,
-    fold_fn:Option<Variable>,
+    pub fold_fn:Option<Variable>,
     pub updated:Option<EventID>
 }
 
@@ -27,8 +27,8 @@ pub struct Dynamic {
 pub struct FRPSystem {
     auto_id:u32,
     never_event:EventID,
-    events:HashMap<u32,Event>,
-    dynamics:HashMap<u32,Dynamic>
+    pub events:HashMap<u32,Event>,
+    pub dynamics:HashMap<u32,Dynamic>
 }
 
 impl FRPSystem {
@@ -109,6 +109,8 @@ impl FRPSystem {
         self.auto_id += 1;
         Some(self.auto_id - 1)
     }
+
+   
 }
 
 #[test]
