@@ -17,9 +17,23 @@ pub struct Event {
 pub type DynamicID = u32;
 
 pub struct Dynamic {
-    pub value:Variable,
+    value:Variable,
     pub fold_fn:Option<Variable>,
-    pub updated:Option<EventID>
+    pub updated:Option<EventID>,
+    version:u32,
+}
+
+impl Dynamic {
+    #[inline]
+    pub fn get_version(&self) -> u32 { self.version }
+    
+    #[inline]
+    pub fn get_value(&self) -> &Variable { &self.value }
+    
+    pub fn set_value(&mut self,value:Variable) {
+        self.value = value;
+        self.version = self.version + 1;
+    }
 }
 
 
@@ -102,7 +116,7 @@ impl FRPSystem {
     }
 
     pub fn new_dynamic(&mut self,value:Variable,event:EventID,fold_fn:Option<Variable>) -> Option<DynamicID>  {
-        let dynmaic = Dynamic { value,fold_fn,updated:None };
+        let dynmaic = Dynamic { value,fold_fn,updated:None,version:0 };
         let event_mut = self.events.get_mut(&event)?;
         event_mut.next_dynamics.push(self.auto_id);
         self.dynamics.insert(self.auto_id, dynmaic);
