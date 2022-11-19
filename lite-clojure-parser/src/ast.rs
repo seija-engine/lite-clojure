@@ -1,4 +1,4 @@
-use crate::errors::CSTError;
+use crate::{errors::CSTError, GLOBAL_MACRO_HOOKS};
 
 use super::{cexpr::{CExpr}, errors::{ASTError}, expr::Expr, meta::MetaTable, value::Symbol};
 use super::cst::ParseCST;
@@ -36,9 +36,13 @@ impl TranslateToAST {
     }
 
     fn translate_cexpr(&mut self,mut cexpr:CExpr) {
-        //TODO 宏展开
+       
         self.hand_macro_expr(&mut cexpr);
 
+        let macro_list = GLOBAL_MACRO_HOOKS.lock().unwrap();
+        for macro_fn in macro_list.iter() {
+            macro_fn(&mut cexpr);
+        }
         if let Some(az) = self.analyze(cexpr) {
             match az {
                Ok(v) => {

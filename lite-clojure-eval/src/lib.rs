@@ -8,7 +8,7 @@ mod module;
 mod exec_context;
 
 pub use variable::{Variable,GcRefCell,ExecScope};
-
+pub use lite_clojure_parser as parser;
 pub use eval_rt::EvalRT;
 pub use error::EvalError;
 use anyhow::{Result};

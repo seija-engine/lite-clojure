@@ -524,7 +524,7 @@ impl<'a> ParseCST<'a> {
 
 #[test]
 fn test_parse() {
-   let code_string = std::fs::read_to_string("tests/test.clj").unwrap();
+   let code_string = std::fs::read_to_string("tests/test2.clj").unwrap();
   
    let mut parser = ParseCST::new(&code_string);
    let ret = parser.parse_exprs();
